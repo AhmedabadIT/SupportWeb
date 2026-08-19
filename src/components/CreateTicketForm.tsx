@@ -145,7 +145,7 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
   const fetchNextTID = async (forDate: string) => {
     try {
       const response = await fetch(`/api/tickets/next-tid?date=${forDate}&systemMode=${systemMode}`).catch(() => null);
-      if (response && response.ok) {
+      if (response && response.ok && response.headers.get('content-type')?.includes('application/json')) {
         const data = await response.json();
         if (data.nextTid) {
           setSuggestedTid(data.nextTid);
@@ -399,7 +399,7 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
           body: JSON.stringify({ message: whatsappInput })
         });
 
-        if (response.ok) {
+        if (response && response.ok && response.headers.get('content-type')?.includes('application/json')) {
           data = await response.json();
         }
       } catch (err) {

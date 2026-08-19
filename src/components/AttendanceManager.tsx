@@ -81,9 +81,13 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
     setIsLoadingBackups(true);
     try {
       const response = await fetch('/api/attendance/backups').catch(() => null);
-      if (response && response.ok) {
-        const data = await response.json();
-        setBackupFiles(data.files || []);
+      if (response && response.ok && response.headers.get('content-type')?.includes('application/json')) {
+        try {
+          const data = await response.json();
+          setBackupFiles(data.files || []);
+        } catch (e) {
+          // ignore
+        }
       }
     } catch (e) {
       console.log("Backups endpoint unavailable in static mode");
@@ -131,9 +135,14 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
     try {
       const response = await fetch(`/api/attendance?year=${selectedYear}&month=${selectedMonth}`).catch(() => null);
       let data: AttendanceRecord[] = [];
-      if (response && response.ok) {
-        data = await response.json();
-        localStorage.setItem(storageKey, JSON.stringify(data));
+      if (response && response.ok && response.headers.get('content-type')?.includes('application/json')) {
+        try {
+          data = await response.json();
+          localStorage.setItem(storageKey, JSON.stringify(data));
+        } catch (e) {
+          const cached = localStorage.getItem(storageKey);
+          data = cached ? JSON.parse(cached) : [];
+        }
       } else {
         const cached = localStorage.getItem(storageKey);
         data = cached ? JSON.parse(cached) : [];

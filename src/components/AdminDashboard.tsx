@@ -47,13 +47,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const fetchDbFiles = async () => {
     try {
       setLoadingFiles(true);
-      const res = await fetch('/api/db/files');
-      if (res.ok) {
-        const data = await res.json();
-        setDbFiles(data.files || []);
+      const res = await fetch('/api/db/files').catch(() => null);
+      if (res && res.ok && res.headers.get('content-type')?.includes('application/json')) {
+        try {
+          const data = await res.json();
+          setDbFiles(data.files || []);
+        } catch (err) {
+          setDbFiles([]);
+        }
       }
     } catch (e) {
-      console.error('Failed to load DB files', e);
+      console.log('DB files API offline in static mode');
     } finally {
       setLoadingFiles(false);
     }

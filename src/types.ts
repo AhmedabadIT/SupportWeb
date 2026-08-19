@@ -14,6 +14,9 @@ export interface Engineer {
   computer_certificate?: string;
   experience?: string;
   photo?: string; // Base64 or image URL
+  joining_date?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Ticket {
