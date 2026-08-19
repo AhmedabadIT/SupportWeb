@@ -63,9 +63,10 @@ export const EngineersManager: React.FC<EngineersManagerProps> = ({
 
   const getPhotoSrc = (photoPath: string | undefined) => {
     if (!photoPath) return '';
-    if (photoPath.startsWith('data:')) return photoPath;
-    const cleanPath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
-    return `${window.location.origin}${encodeURI(cleanPath)}`;
+    if (photoPath.startsWith('data:') || photoPath.startsWith('http://') || photoPath.startsWith('https://')) return photoPath;
+    const base = ((import.meta as any).env?.BASE_URL as string) || '/';
+    const cleanPath = photoPath.startsWith('/') ? photoPath.slice(1) : photoPath;
+    return `${base.endsWith('/') ? base : base + '/'}${encodeURI(cleanPath)}`;
   };
 
   const handleProceedToPrint = () => {

@@ -144,16 +144,33 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
 
   const fetchNextTID = async (forDate: string) => {
     try {
-      const response = await fetch(`/api/tickets/next-tid?date=${forDate}&systemMode=${systemMode}`);
-      const data = await response.json();
-      if (data.nextTid) {
-        setSuggestedTid(data.nextTid);
-        if (!isTidManuallyEdited) {
-          setTid(data.nextTid);
+      const response = await fetch(`/api/tickets/next-tid?date=${forDate}&systemMode=${systemMode}`).catch(() => null);
+      if (response && response.ok) {
+        const data = await response.json();
+        if (data.nextTid) {
+          setSuggestedTid(data.nextTid);
+          if (!isTidManuallyEdited) {
+            setTid(data.nextTid);
+          }
+          return;
         }
       }
     } catch (err) {
-      console.error('Failed to fetch ticket ID:', err);
+      console.log('Using local TID generator');
+    }
+
+    // Local TID Generator fallback
+    const targetDate = forDate || new Date().toISOString().split('T')[0];
+    const [y, m, d] = targetDate.split('-');
+    const datePrefix = `${(y || '26').slice(-2)}${m || '01'}${d || '01'}`;
+    const prefix = systemMode === 'Surat' ? `SUR-${datePrefix}-` : `${datePrefix}-`;
+    const cachedTickets: any[] = JSON.parse(localStorage.getItem('cached_tickets') || '[]');
+    const matching = cachedTickets.filter(t => t.ticket_id?.toUpperCase().startsWith(prefix));
+    const nextNum = (matching.length + 1).toString().padStart(2, '0');
+    const localNextTid = `${prefix}${nextNum}`;
+    setSuggestedTid(localNextTid);
+    if (!isTidManuallyEdited) {
+      setTid(localNextTid);
     }
   };
 
@@ -191,23 +208,62 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
       return;
     }
 
+    const startTime = Date.now();
     setIsParsing(true);
     try {
-      const startTime = Date.now();
-      const response = await fetch('/api/tickets/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: whatsappInput })
-      });
+      let data: any = null;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to parse message');
+      try {
+        const response = await fetch('/api/tickets/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: whatsappInput })
+        });
+
+        if (response.ok) {
+          data = await response.json();
+        }
+      } catch (err) {
+        console.log('Falling back to client-side WhatsApp parser');
       }
 
-      const data = await response.json();
+      // Client-side regex parser fallback if server is offline or on GitHub Pages
+      if (!data) {
+        const text = whatsappInput;
+        const phoneMatch = text.match(/(?:(?:(?:\+91|91|0)?[\s-]?)?[6-9]\d{9})/);
+        const nameMatch = text.match(/(?:Name|User|Staff|Person|Doctor|Dr\.|Officer)[:\s]*([^\n,\r]+)/i);
+        const locMatch = text.match(/(?:Location|Hospital|Center|Centre|Branch|Room|Ward|Dept|Office|Building)[:\s]*([^\n,\r]+)/i);
+        const probMatch = text.match(/(?:Problem|Issue|Fault|Complaint|Error|Not Working|Defect)[:\s]*([^\n\r]+)/i);
+        const snMatch = text.match(/(?:S\/N|Serial|Serial No|SN|Tag)[:\s]*([A-Za-z0-9_-]+)/i);
 
-      // Normalize hardware model aliases (e.g. "aio 7470", "dell 7470", "dell optiplex" -> "Dell Optiplex 7470")
+        let detectedProduct = 'AIO';
+        if (/laptop/i.test(text)) detectedProduct = 'Laptop';
+        else if (/desktop|cpu|tower/i.test(text)) detectedProduct = 'Desktop';
+        else if (/printer|laserjet|deskjet/i.test(text)) detectedProduct = 'Printer';
+        else if (/scanner/i.test(text)) detectedProduct = 'Scanner';
+        else if (/cctv|camera|nvr|dvr/i.test(text)) detectedProduct = 'CCTV';
+
+        let detectedBrand = '';
+        if (/dell/i.test(text)) detectedBrand = 'Dell';
+        else if (/hp|hewlett/i.test(text)) detectedBrand = 'HP';
+        else if (/lenovo/i.test(text)) detectedBrand = 'Lenovo';
+        else if (/canon/i.test(text)) detectedBrand = 'Canon';
+        else if (/epson/i.test(text)) detectedBrand = 'Epson';
+
+        data = {
+          username: nameMatch ? nameMatch[1].trim() : '',
+          contact: phoneMatch ? phoneMatch[0].replace(/[\s-]/g, '') : '',
+          location: locMatch ? locMatch[1].trim() : (systemMode === 'Surat' ? 'Surat' : ''),
+          problem: probMatch ? probMatch[1].trim() : text.slice(0, 100),
+          serial_number: snMatch ? snMatch[1].trim() : '',
+          product: detectedProduct,
+          brand: detectedBrand,
+          category: 'Hardware',
+          model: ''
+        };
+      }
+
+      // Normalize hardware model aliases
       const normalized = normalizeModelString(
         data.model,
         data.product,

@@ -15,6 +15,7 @@ import { EngineerDashboardView } from './components/EngineerDashboardView';
 import { AttendanceManager } from './components/AttendanceManager';
 import { AdminSwiggyTracker } from './components/AdminSwiggyTracker';
 import { GurmystLogo, GurmystLogoHorizontal } from './components/GurmystLogo';
+import { INITIAL_ENGINEERS, INITIAL_TICKETS, INITIAL_VISITS } from './utils/initialData';
 import { 
   Users, 
   Layers, 
@@ -101,34 +102,96 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  // Fetch all initial data
+  // Fetch all initial data with automatic localStorage / initial data fallback
   const fetchData = async (isSilent = false) => {
     if (!isSilent) {
       setIsLoading(true);
     }
     try {
       const [ticketsRes, engineersRes, visitsRes] = await Promise.all([
-        fetch('/api/tickets'),
-        fetch('/api/engineers'),
-        fetch('/api/location-visits')
+        fetch('/api/tickets').catch(() => null),
+        fetch('/api/engineers').catch(() => null),
+        fetch('/api/location-visits').catch(() => null)
       ]);
 
-      if (!ticketsRes.ok || !engineersRes.ok) {
-        throw new Error('Failed to retrieve database records');
+      let ticketsData: Ticket[] | null = null;
+      let engineersData: Engineer[] | null = null;
+      let visitsData: LocationVisit[] | null = null;
+
+      if (ticketsRes && ticketsRes.ok) {
+        try {
+          ticketsData = await ticketsRes.json();
+        } catch (e) {
+          console.warn('Could not parse tickets JSON', e);
+        }
       }
 
-      const ticketsData = await ticketsRes.json();
-      const engineersData = await engineersRes.json();
-      const visitsData = visitsRes.ok ? await visitsRes.json() : [];
+      if (engineersRes && engineersRes.ok) {
+        try {
+          engineersData = await engineersRes.json();
+        } catch (e) {
+          console.warn('Could not parse engineers JSON', e);
+        }
+      }
 
-      setTickets(ticketsData);
-      setEngineers(engineersData);
-      setVisits(visitsData);
+      if (visitsRes && visitsRes.ok) {
+        try {
+          visitsData = await visitsRes.json();
+        } catch (e) {
+          console.warn('Could not parse visits JSON', e);
+        }
+      }
+
+      // Handle Tickets Sync
+      if (ticketsData) {
+        setTickets(ticketsData);
+        localStorage.setItem('cached_tickets', JSON.stringify(ticketsData));
+      } else {
+        const cached = localStorage.getItem('cached_tickets');
+        if (cached) {
+          setTickets(JSON.parse(cached));
+        } else {
+          setTickets(INITIAL_TICKETS);
+          localStorage.setItem('cached_tickets', JSON.stringify(INITIAL_TICKETS));
+        }
+      }
+
+      // Handle Engineers Sync
+      if (engineersData && engineersData.length > 0) {
+        setEngineers(engineersData);
+        localStorage.setItem('cached_engineers', JSON.stringify(engineersData));
+      } else {
+        const cached = localStorage.getItem('cached_engineers');
+        if (cached) {
+          setEngineers(JSON.parse(cached));
+        } else {
+          setEngineers(INITIAL_ENGINEERS);
+          localStorage.setItem('cached_engineers', JSON.stringify(INITIAL_ENGINEERS));
+        }
+      }
+
+      // Handle Visits Sync
+      if (visitsData) {
+        setVisits(visitsData);
+        localStorage.setItem('cached_visits', JSON.stringify(visitsData));
+      } else {
+        const cached = localStorage.getItem('cached_visits');
+        if (cached) {
+          setVisits(JSON.parse(cached));
+        } else {
+          setVisits(INITIAL_VISITS);
+          localStorage.setItem('cached_visits', JSON.stringify(INITIAL_VISITS));
+        }
+      }
     } catch (err: any) {
       console.error(err);
-      if (!isSilent) {
-        showToast(err.message || 'Error communicating with helpdesk server', 'error');
-      }
+      // Graceful fallback from cache or initial seed
+      const cachedEng = localStorage.getItem('cached_engineers');
+      setEngineers(cachedEng ? JSON.parse(cachedEng) : INITIAL_ENGINEERS);
+      const cachedT = localStorage.getItem('cached_tickets');
+      setTickets(cachedT ? JSON.parse(cachedT) : INITIAL_TICKETS);
+      const cachedV = localStorage.getItem('cached_visits');
+      setVisits(cachedV ? JSON.parse(cachedV) : INITIAL_VISITS);
     } finally {
       if (!isSilent) {
         setIsLoading(false);
@@ -147,7 +210,19 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- Database Operations ---
+  // --- Database Operations with Offline & Static GitHub Pages Support ---
+
+  // Helper to persist updated tickets state to cache
+  const updateTicketsLocal = (newTickets: Ticket[]) => {
+    setTickets(newTickets);
+    localStorage.setItem('cached_tickets', JSON.stringify(newTickets));
+  };
+
+  // Helper to persist updated engineers state to cache
+  const updateEngineersLocal = (newEngineers: Engineer[]) => {
+    setEngineers(newEngineers);
+    localStorage.setItem('cached_engineers', JSON.stringify(newEngineers));
+  };
 
   // Create or Update Ticket
   const handleSaveTicket = async (ticketData: Omit<Ticket, 'id' | 'ticket_id' | 'created_at' | 'updated_at'> & { id?: string; ticket_id?: string }) => {
@@ -162,18 +237,19 @@ export default function App() {
       if (duplicate) {
         if (duplicate.status !== ticketData.status) {
           // Status has changed! Automatically update the existing record with the new data
-          const response = await fetch(`/api/tickets/${duplicate.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...ticketData, id: duplicate.id })
-          });
+          const updatedList = tickets.map(t => t.id === duplicate.id ? { ...t, ...ticketData, updated_at: new Date().toISOString() } : t);
+          updateTicketsLocal(updatedList);
 
-          if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error || 'Failed to update existing duplicate ticket');
+          try {
+            await fetch(`/api/tickets/${duplicate.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...ticketData, id: duplicate.id })
+            });
+          } catch (e) {
+            console.log('Saved to local storage (static mode)');
           }
 
-          await fetchData();
           setEditingTicket(null);
           return;
         } else {
@@ -182,129 +258,189 @@ export default function App() {
       }
     }
 
-    const url = isEditing ? `/api/tickets/${ticketData.id}` : '/api/tickets';
-    const method = isEditing ? 'PUT' : 'POST';
-
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ticketData)
-    });
-
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to save ticket details');
+    if (isEditing) {
+      const updatedList = tickets.map(t => t.id === ticketData.id ? { ...t, ...ticketData, updated_at: new Date().toISOString() } as Ticket : t);
+      updateTicketsLocal(updatedList);
+      try {
+        await fetch(`/api/tickets/${ticketData.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ticketData)
+        });
+      } catch (e) {
+        console.log('Saved to local storage');
+      }
+    } else {
+      const newTicket: Ticket = {
+        ...ticketData,
+        id: 't-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+        ticket_id: ticketData.ticket_id || `TID-${Date.now().toString().slice(-4)}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      } as Ticket;
+      const updatedList = [newTicket, ...tickets];
+      updateTicketsLocal(updatedList);
+      try {
+        await fetch('/api/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ticketData)
+        });
+      } catch (e) {
+        console.log('Saved to local storage');
+      }
     }
 
-    // Refresh tickets
-    await fetchData();
     setEditingTicket(null);
   };
 
   // Update specific fields of a ticket (for Engineer Status Updates)
   const handleUpdateTicket = async (id: string, updatedFields: Partial<Ticket>) => {
-    const response = await fetch(`/api/tickets/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedFields)
-    });
+    const updatedList = tickets.map(t => t.id === id ? { ...t, ...updatedFields, updated_at: new Date().toISOString() } : t);
+    updateTicketsLocal(updatedList);
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to update ticket details');
+    try {
+      await fetch(`/api/tickets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedFields)
+      });
+    } catch (e) {
+      console.log('Updated in local storage');
     }
-
-    await fetchData();
   };
 
   // Delete Ticket
   const handleDeleteTicket = async (id: string) => {
-    const response = await fetch(`/api/tickets/${id}`, {
-      method: 'DELETE'
-    });
+    const updatedList = tickets.filter(t => t.id !== id);
+    updateTicketsLocal(updatedList);
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to delete ticket record');
+    try {
+      await fetch(`/api/tickets/${id}`, {
+        method: 'DELETE'
+      });
+    } catch (e) {
+      console.log('Deleted from local storage');
     }
-
-    await fetchData();
   };
 
   // Delete All Tickets
   const handleDeleteAllTickets = async () => {
-    const response = await fetch('/api/tickets', {
-      method: 'DELETE'
-    });
+    updateTicketsLocal([]);
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to clear all ticket logs');
+    try {
+      await fetch('/api/tickets', {
+        method: 'DELETE'
+      });
+    } catch (e) {
+      console.log('Cleared local storage');
     }
-
-    await fetchData();
   };
 
   // Bulk Import Tickets
   const handleBulkImport = async (importedTickets: Array<Partial<Ticket>>) => {
-    const response = await fetch('/api/tickets/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tickets: importedTickets })
-    });
+    const timestamp = Date.now();
+    const mapped: Ticket[] = importedTickets.map((it, idx) => ({
+      id: it.id || `imp-${timestamp}-${idx}`,
+      ticket_id: it.ticket_id || `IMP-${idx + 1}`,
+      date: it.date || new Date().toISOString().split('T')[0],
+      username: it.username || 'N/A',
+      contact: it.contact || 'N/A',
+      location: it.location || 'N/A',
+      product: it.product || 'AIO',
+      category: it.category || 'Hardware',
+      brand: it.brand || '',
+      model: it.model || '',
+      serial_number: it.serial_number || '',
+      problem: it.problem || 'Hardware Issue',
+      engineer: it.engineer || 'Unassigned',
+      status: it.status || 'Open',
+      action_taken: it.action_taken || '',
+      first_visit_date: it.first_visit_date || '',
+      hold_date: it.hold_date || '',
+      close_date: it.close_date || '',
+      engineer_remark: it.engineer_remark || '',
+      resolution_days: it.resolution_days !== undefined ? it.resolution_days : null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to import tickets');
+    const combined = [...mapped, ...tickets];
+    updateTicketsLocal(combined);
+
+    try {
+      await fetch('/api/tickets/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickets: importedTickets })
+      });
+    } catch (e) {
+      console.log('Imported tickets into local storage');
     }
-
-    await fetchData();
   };
 
   // Create Engineer
   const handleCreateEngineer = async (fields: Partial<Engineer>) => {
-    const response = await fetch('/api/engineers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fields)
-    });
+    const newEngineer: Engineer = {
+      id: 'eng-' + Date.now(),
+      name: fields.name || 'New Engineer',
+      mobile: fields.mobile || '',
+      email: fields.email || '',
+      password: fields.password || `${(fields.name || 'Eng').replace(/\s+/g, '')}@1234`,
+      active: fields.active !== undefined ? fields.active : true,
+      resigned: fields.resigned || false,
+      resignation_date: fields.resignation_date || '',
+      location: fields.location || 'Ro-Ahmedabad',
+      address: fields.address || '',
+      work_profile: fields.work_profile || 'System Support Engineer',
+      education: fields.education || '',
+      computer_certificate: fields.computer_certificate || '',
+      experience: fields.experience || '',
+      photo: fields.photo || ''
+    };
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to register engineer profile');
+    const updatedEngineers = [...engineers, newEngineer];
+    updateEngineersLocal(updatedEngineers);
+
+    try {
+      await fetch('/api/engineers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields)
+      });
+    } catch (e) {
+      console.log('Saved engineer to local storage');
     }
-
-    await fetchData();
   };
 
   // Update Engineer Details
   const handleUpdateEngineer = async (id: string, updatedFields: Partial<Engineer>) => {
-    const response = await fetch(`/api/engineers/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedFields)
-    });
+    const updatedEngineers = engineers.map(eng => eng.id === id ? { ...eng, ...updatedFields } : eng);
+    updateEngineersLocal(updatedEngineers);
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to update engineer details');
+    try {
+      await fetch(`/api/engineers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedFields)
+      });
+    } catch (e) {
+      console.log('Updated engineer in local storage');
     }
-
-    await fetchData();
   };
 
   // Delete Engineer profile
   const handleDeleteEngineer = async (id: string) => {
-    const response = await fetch(`/api/engineers/${id}`, {
-      method: 'DELETE'
-    });
+    const updatedEngineers = engineers.filter(eng => eng.id !== id);
+    updateEngineersLocal(updatedEngineers);
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || 'Failed to remove engineer');
+    try {
+      await fetch(`/api/engineers/${id}`, {
+        method: 'DELETE'
+      });
+    } catch (e) {
+      console.log('Removed engineer from local storage');
     }
-
-    await fetchData();
   };
 
   // Handler to quickly trigger edit mode on a ticket
