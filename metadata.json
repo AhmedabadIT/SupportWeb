@@ -1,0 +1,6 @@
+{
+  "name": "IT Ticket Management System",
+  "description": "IT helpdesk ticket management system with rapid AI-powered WhatsApp message parser, real-time ticket creation, and administrative and engineer dashboards.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
