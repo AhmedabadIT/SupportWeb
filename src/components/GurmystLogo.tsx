@@ -5,14 +5,26 @@ interface LogoProps {
   size?: number;
 }
 
+const getLogoUrl = () => {
+  const base = (import.meta as any).env?.BASE_URL || './';
+  const cleanBase = base.endsWith('/') ? base : `${base}/`;
+  return `${cleanBase}data/logo.svg`;
+};
+
 export const GurmystLogo: React.FC<LogoProps> = ({ className = '', size = 300 }) => {
+  const [logoSrc, setLogoSrc] = React.useState<string>(getLogoUrl());
+
   return (
     <img
-      src="/data/logo.svg"
+      src={logoSrc}
       alt="Gurmyst Logo"
       style={{ width: size, height: size }}
       className={`select-none object-contain rounded-full shrink-0 ${className}`}
       referrerPolicy="no-referrer"
+      onError={() => {
+        if (!logoSrc.endsWith('logo.svg')) return;
+        setLogoSrc('./logo.svg');
+      }}
     />
   );
 };
@@ -22,14 +34,20 @@ export const GurmystLogoHorizontal: React.FC<LogoProps & { showTagline?: boolean
   size = 40,
   showTagline = true
 }) => {
+  const [logoSrc, setLogoSrc] = React.useState<string>(getLogoUrl());
+
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
       <img
-        src="/data/logo.svg"
+        src={logoSrc}
         alt="Gurmyst Logo"
         style={{ width: size, height: size }}
         className="shrink-0 select-none object-contain rounded-full"
         referrerPolicy="no-referrer"
+        onError={() => {
+          if (!logoSrc.endsWith('logo.svg')) return;
+          setLogoSrc('./logo.svg');
+        }}
       />
 
       {/* Text Branding Label */}
