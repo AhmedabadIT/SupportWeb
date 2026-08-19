@@ -121,7 +121,7 @@ const formatToCustomDate = (dateStr?: string) => {
 
 const formatTicketHorizontal = (t: Ticket): string => {
   const tid = t.ticket_id || '';
-  const dateVal = formatToCustomDate(t.date);
+  const dateVal = t.date || '';
   const usernameVal = t.username || '';
   const contactVal = t.contact || '';
   const locationVal = t.location || '';
@@ -130,11 +130,11 @@ const formatTicketHorizontal = (t: Ticket): string => {
   const modelVal = t.model || '';
   const serialVal = t.serial_number || '';
   const problemVal = t.problem || '';
-  const engineerVal = (t.engineer || '').trim().split(' ')[0] || '';
+  const engineerVal = t.engineer || '';
   const actionVal = (t.action_taken === 'N/A' || !t.action_taken) ? '' : t.action_taken;
-  const firstVisitVal = formatToCustomDate(t.first_visit_date);
-  const holdVal = formatToCustomDate(t.hold_date);
-  const closeVal = formatToCustomDate(t.close_date);
+  const firstVisitVal = t.first_visit_date || '';
+  const holdVal = t.hold_date || '';
+  const closeVal = t.close_date || '';
   const resolutionDaysVal = calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status).text;
   const statusVal = t.status || '';
   const remarkVal = (t.engineer_remark === 'N/A' || !t.engineer_remark) ? '' : t.engineer_remark;
@@ -617,7 +617,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       const srNo = String(idx + 1);
       
       const tid = t.ticket_id || '';
-      const dateVal = formatToCustomDate(t.date);
+      const dateVal = t.date || '';
       const usernameVal = t.username || '';
       const contactVal = t.contact || '';
       const locationVal = t.location || '';
@@ -626,11 +626,11 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       const modelVal = t.model || '';
       const serialVal = t.serial_number || '';
       const problemVal = t.problem || '';
-      const engineerVal = (t.engineer || '').trim().split(' ')[0] || '';
+      const engineerVal = t.engineer || '';
       const actionVal = (t.action_taken === 'N/A' || !t.action_taken) ? '' : t.action_taken;
-      const firstVisitVal = formatToCustomDate(t.first_visit_date);
-      const holdVal = formatToCustomDate(t.hold_date);
-      const closeVal = formatToCustomDate(t.close_date);
+      const firstVisitVal = t.first_visit_date || '';
+      const holdVal = t.hold_date || '';
+      const closeVal = t.close_date || '';
       const resolutionDaysVal = calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status).text;
       const statusVal = t.status || '';
       const remarkVal = (t.engineer_remark === 'N/A' || !t.engineer_remark) ? '' : t.engineer_remark;
@@ -1528,7 +1528,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
     }
   };
 
-  const [viewLayout, setViewLayout] = useState<'table' | 'cards'>('cards');
+  const [viewLayout, setViewLayout] = useState<'table' | 'cards'>('table');
 
   return (
     <div className="space-y-4 w-full max-w-full overflow-x-hidden">
@@ -2091,13 +2091,13 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
             )}
           </div>
         ) : (
-          /* Full Table View */
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left text-slate-600 dark:text-slate-400">
-              <thead className="text-[10px] text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800/60 whitespace-nowrap">
-                <tr>
-                  <th className="px-3 py-3 text-center font-bold">Sr No</th>
-                  <th className="px-3 py-3 text-center font-bold w-10">
+          /* Full Excel-Format Table View */
+          <div className="overflow-x-auto border border-slate-300 dark:border-slate-700 rounded-lg">
+            <table className="w-full text-xs text-left text-slate-700 dark:text-slate-200 border-collapse">
+              <thead className="text-[11px] text-slate-700 dark:text-slate-200 uppercase bg-slate-100 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 whitespace-nowrap sticky top-0 z-10 select-none">
+                <tr className="divide-x divide-slate-300 dark:divide-slate-700">
+                  <th className="px-2.5 py-2.5 text-center font-bold w-12 bg-slate-100 dark:bg-slate-800">Sr No</th>
+                  <th className="px-2 py-2.5 text-center font-bold w-10 bg-slate-100 dark:bg-slate-800">
                     <input
                       type="checkbox"
                       checked={paginatedTickets.length > 0 && paginatedTickets.every(t => selectedTicketIds.includes(t.id))}
@@ -2110,48 +2110,48 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                           setSelectedTicketIds(selectedTicketIds.filter(id => !paginatedIds.includes(id)));
                         }
                       }}
-                      className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+                      className="rounded border-slate-400 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
                     />
                   </th>
-                  <th onClick={() => handleSort('ticket_id')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                  <th onClick={() => handleSort('ticket_id')} className="px-3 py-2.5 font-bold cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors">
                     Ticket Number {sortField === 'ticket_id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                   </th>
-                  <th onClick={() => handleSort('date')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                  <th onClick={() => handleSort('date')} className="px-3 py-2.5 font-bold cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors">
                     Date {sortField === 'date' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                   </th>
-                  <th onClick={() => handleSort('username')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                  <th onClick={() => handleSort('username')} className="px-3 py-2.5 font-bold cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors">
                     Username {sortField === 'username' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                   </th>
-                  <th className="px-3 py-3 font-bold">Contact Number</th>
-                  <th onClick={() => handleSort('location')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                  <th className="px-3 py-2.5 font-bold">Contact Number</th>
+                  <th onClick={() => handleSort('location')} className="px-3 py-2.5 font-bold cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors">
                     Location/ Address {sortField === 'location' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                   </th>
-                  <th className="px-3 py-3 font-bold">Product</th>
-                  <th className="px-3 py-3 font-bold">Category</th>
-                  <th className="px-3 py-3 font-bold">Model</th>
-                  <th className="px-3 py-3 font-bold">System Sr no.</th>
-                  <th className="px-3 py-3 font-bold">Problem</th>
-                  <th onClick={() => handleSort('engineer')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                  <th className="px-3 py-2.5 font-bold">Product</th>
+                  <th className="px-3 py-2.5 font-bold">Category</th>
+                  <th className="px-3 py-2.5 font-bold">Model</th>
+                  <th className="px-3 py-2.5 font-bold">System Sr no.</th>
+                  <th className="px-3 py-2.5 font-bold">Problem</th>
+                  <th onClick={() => handleSort('engineer')} className="px-3 py-2.5 font-bold cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors">
                     Assign to {sortField === 'engineer' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                   </th>
-                  <th className="px-3 py-3 font-bold">Action Taken</th>
-                  <th className="px-3 py-3 font-bold">First Visit Date</th>
-                  <th className="px-3 py-3 font-bold">Hold Date</th>
-                  <th className="px-3 py-3 font-bold">Close Date</th>
-                  <th onClick={() => handleSort('status')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors text-center">
+                  <th className="px-3 py-2.5 font-bold">Action Taken</th>
+                  <th className="px-3 py-2.5 font-bold">First Visit Date</th>
+                  <th className="px-3 py-2.5 font-bold">Hold Date</th>
+                  <th className="px-3 py-2.5 font-bold">Close Date</th>
+                  <th onClick={() => handleSort('status')} className="px-3 py-2.5 font-bold cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors text-center">
                     Status {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                   </th>
-                  <th className="px-3 py-3 font-bold">Remark of Engineer</th>
-                  <th onClick={() => handleSort('resolution_days')} className="px-3 py-3 font-bold text-center cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors whitespace-nowrap" title="Click to sort by calculated days between First Visit Date & Close Date">
+                  <th className="px-3 py-2.5 font-bold">Remark of Engineer</th>
+                  <th onClick={() => handleSort('resolution_days')} className="px-3 py-2.5 font-bold text-center cursor-pointer hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors whitespace-nowrap" title="Click to sort by calculated days between First Visit Date & Close Date">
                     Resolution Days {sortField === 'resolution_days' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                   </th>
-                  <th className="px-3 py-3 font-bold text-center">Actions</th>
+                  <th className="px-3 py-2.5 font-bold text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 whitespace-nowrap">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700 whitespace-nowrap">
                 {paginatedTickets.length === 0 ? (
                   <tr>
-                    <td colSpan={20} className="text-center py-12 text-slate-400 dark:text-slate-500 font-medium">
+                    <td colSpan={21} className="text-center py-12 text-slate-400 dark:text-slate-500 font-medium">
                       No tickets found matching your query.
                     </td>
                   </tr>
@@ -2159,9 +2159,9 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                   paginatedTickets.map((t, idx) => {
                     const globalIndex = (currentPage - 1) * itemsPerPage + idx + 1;
                     return (
-                      <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors align-top text-[11px]">
-                        <td className="px-3 py-4 text-center text-slate-400 font-medium">{globalIndex}</td>
-                        <td className="px-3 py-4 text-center">
+                      <tr key={t.id} className="hover:bg-indigo-50/30 dark:hover:bg-slate-800/40 transition-colors align-middle divide-x divide-slate-200 dark:divide-slate-700 text-xs">
+                        <td className="px-2.5 py-2.5 text-center text-slate-500 font-mono font-medium">{globalIndex}</td>
+                        <td className="px-2 py-2.5 text-center">
                           <input
                             type="checkbox"
                             checked={selectedTicketIds.includes(t.id)}
@@ -2180,10 +2180,10 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                               }
                               setSelectedTicketIds(updated);
                             }}
-                            className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+                            className="rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
                           />
                         </td>
-                        <td className="px-3 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        <td className="px-3 py-2.5 font-mono font-bold text-indigo-600 dark:text-indigo-400">
                           <div className="flex items-center gap-1.5 group select-all">
                             <span>{t.ticket_id}</span>
                             <button
@@ -2200,45 +2200,45 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                             </button>
                           </div>
                         </td>
-                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.date}</td>
-                        <td className="px-3 py-4 font-bold text-slate-800 dark:text-slate-200">{t.username}</td>
-                        <td className="px-3 py-4 font-semibold text-slate-600 dark:text-slate-400">{t.contact}</td>
-                        <td className="px-3 py-4 text-slate-700 dark:text-slate-300 max-w-[150px] truncate" title={t.location}>{t.location}</td>
-                        <td className="px-3 py-4 font-bold text-slate-800 dark:text-slate-200">{t.product || 'Other'}</td>
-                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400">{t.category || 'Other'}</td>
-                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400">{t.model || 'N/A'}</td>
-                        <td className="px-3 py-4 font-mono text-slate-500 dark:text-slate-400">{t.serial_number || 'N/A'}</td>
-                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.problem}>{t.problem}</td>
-                        <td className="px-3 py-4 font-bold text-slate-700 dark:text-slate-300">{t.engineer || 'Unassigned'}</td>
-                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.action_taken}>{t.action_taken || 'N/A'}</td>
-                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.first_visit_date || 'N/A'}</td>
-                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.hold_date || 'N/A'}</td>
-                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.close_date || 'N/A'}</td>
-                        <td className="px-3 py-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                            t.status && t.status.trim().toLowerCase() === 'open' ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50 dark:border-indigo-950/50' :
-                            t.status && t.status.trim().toLowerCase() === 'hold' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border border-purple-100/50 dark:border-purple-950/50' :
-                            'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-950/50'
+                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{t.date}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-slate-100">{t.username}</td>
+                        <td className="px-3 py-2.5 font-semibold text-slate-700 dark:text-slate-300">{t.contact}</td>
+                        <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300 max-w-[180px] truncate" title={t.location}>{t.location}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-slate-200">{t.product || 'Other'}</td>
+                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400">{t.category || 'Other'}</td>
+                        <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{t.model || 'N/A'}</td>
+                        <td className="px-3 py-2.5 font-mono text-slate-600 dark:text-slate-400">{t.serial_number || 'N/A'}</td>
+                        <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300 max-w-[200px] truncate" title={t.problem}>{t.problem}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-800 dark:text-slate-200">{t.engineer || 'Unassigned'}</td>
+                        <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300 max-w-[200px] truncate" title={t.action_taken}>{t.action_taken || 'N/A'}</td>
+                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{t.first_visit_date || 'N/A'}</td>
+                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{t.hold_date || 'N/A'}</td>
+                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{t.close_date || 'N/A'}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                            t.status && t.status.trim().toLowerCase() === 'open' ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' :
+                            t.status && t.status.trim().toLowerCase() === 'hold' ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800' :
+                            'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                           }`}>
                             ● {t.status}
                           </span>
                         </td>
-                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.engineer_remark}>{t.engineer_remark || 'N/A'}</td>
-                        <td className="px-3 py-4 text-center whitespace-nowrap">
+                        <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400 max-w-[180px] truncate" title={t.engineer_remark}>{t.engineer_remark || 'N/A'}</td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
                           {(() => {
                             const dateDiff = calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status);
                             return (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${dateDiff.badgeClass}`}>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${dateDiff.badgeClass}`}>
                                 {dateDiff.text}
                               </span>
                             );
                           })()}
                         </td>
-                        <td className="px-3 py-4 text-center">
+                        <td className="px-3 py-2.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => onEditTicket(t)}
-                              className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
+                              className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded transition-all cursor-pointer"
                               title="Edit Ticket"
                             >
                               <Edit className="w-3.5 h-3.5" />
@@ -2249,7 +2249,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                                 setDeleteConfirmCheckbox(false);
                                 setDeleteConfirmText('');
                               }}
-                              className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
+                              className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded transition-all cursor-pointer"
                               title="Remove Ticket"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
