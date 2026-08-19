@@ -40,8 +40,30 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
-  // Theme State
-  const [darkMode, setDarkMode] = useState(false);
+  // Theme State with localStorage persistence & system preference
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const savedTheme = localStorage.getItem('app_theme');
+    if (savedTheme) {
+      return savedTheme === 'dark';
+    }
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  // Sync dark class to html document element and persist to localStorage
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+      localStorage.setItem('app_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+      localStorage.setItem('app_theme', 'light');
+    }
+  }, [darkMode]);
 
   // System Mode State (RO-Ahmedabad vs Surat separate helpdesks)
   const [systemMode, setSystemMode] = useState<'RO-Ahmedabad' | 'Surat'>('RO-Ahmedabad');
@@ -460,132 +482,315 @@ export default function App() {
   ] as const;
 
   return (
-    <div className={`min-h-screen font-sans transition-colors duration-300 ${
+    <div className={`${darkMode ? 'dark' : ''} min-h-screen font-sans transition-colors duration-300 ${
       darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50/60 text-slate-800'
     }`}>
       
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
-      {/* Main Top Header Navbar */}
-      <header className={`sticky top-0 z-40 border-b flex items-center justify-between px-6 py-4 backdrop-blur-md ${
-        darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-100'
-      } shadow-sm`}>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={toggleSidebar}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-600 dark:text-slate-300"
-            title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-          
-          <GurmystLogoHorizontal size={36} />
+      {/* Main Top Header Navbar (Sticky Top) */}
+      <header className={`sticky top-0 z-30 border-b backdrop-blur-md w-full max-w-full transition-colors duration-200 ${
+        darkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200/80'
+      } shadow-xs`}>
+        {/* Desktop Header Layout (md: and up) */}
+        <div className="hidden md:flex items-center justify-between px-4 lg:px-6 py-2.5">
+          {/* Left Side: Collapse Toggle + Full Horizontal Logo */}
+          <div className="flex items-center gap-3 shrink-0">
+            <button 
+              onClick={toggleSidebar}
+              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-600 dark:text-slate-300 cursor-pointer"
+              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              aria-label="Toggle navigation menu"
+            >
+              {sidebarCollapsed ? <Menu className="w-5 h-5" /> : <ChevronRight className="w-5 h-5 rotate-180" />}
+            </button>
+            
+            <GurmystLogoHorizontal size={34} showTagline={true} />
+          </div>
+
+          {/* Right Side: Full Desk Switcher + Role Switcher + Theme Toggle */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Desk Location Switcher (Ahmedabad vs Surat) */}
+            <div className="bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl flex items-center gap-1 border border-slate-200/60 dark:border-slate-700/60">
+              <button
+                id="sys-ro-ahmedabad-btn"
+                onClick={() => {
+                  setSystemMode('RO-Ahmedabad');
+                  setEditingTicket(null);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  systemMode === 'RO-Ahmedabad'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+                title="Switch to Regional Office Ahmedabad"
+              >
+                <span>🏢</span>
+                <span>RO Ahmedabad</span>
+              </button>
+              <button
+                id="sys-surat-btn"
+                onClick={() => {
+                  setSystemMode('Surat');
+                  setEditingTicket(null);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  systemMode === 'Surat'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+                title="Switch to Surat Branch"
+              >
+                <span>🌴</span>
+                <span>Surat</span>
+              </button>
+            </div>
+
+            {/* Quick Role Switcher (Admin vs Engineer) */}
+            <div className="bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl flex items-center gap-1 border border-slate-200/60 dark:border-slate-700/60">
+              <button
+                onClick={() => { setRole('Admin'); setEditingTicket(null); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  role === 'Admin'
+                    ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-950 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+                title="Helpdesk Admin View"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Admin</span>
+              </button>
+              <button
+                onClick={() => { setRole('Engineer'); setEditingTicket(null); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  role === 'Engineer'
+                    ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-950 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+                title="Field Engineer View"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Engineer</span>
+              </button>
+            </div>
+
+            {/* Theme Toggle Button */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-500 dark:text-slate-400 cursor-pointer shrink-0"
+              title="Toggle Dark / Light Mode"
+              aria-label="Toggle theme"
+            >
+              {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+            </button>
+          </div>
         </div>
 
-        {/* Action Controls in Header */}
-        <div className="flex items-center gap-4 flex-wrap">
-          
-          {/* Desk Location Switcher */}
-          <div className="bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl flex items-center gap-1 border border-slate-200/50 dark:border-slate-700/60">
-            <button
-              id="sys-ro-ahmedabad-btn"
-              onClick={() => {
-                setSystemMode('RO-Ahmedabad');
-                setEditingTicket(null);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                systemMode === 'RO-Ahmedabad'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
+        {/* Mobile Header Layout (md:hidden) */}
+        <div className="flex md:hidden items-center justify-between px-2.5 py-2 w-full gap-1">
+          {/* Left: Mobile Menu Toggle + Compact Brand */}
+          <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+            <button 
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-600 dark:text-slate-300 cursor-pointer"
+              aria-label="Toggle navigation menu"
             >
-              🏢 RO Ahmedabad
+              {sidebarOpen ? <X className="w-5 h-5 text-indigo-600" /> : <Menu className="w-5 h-5" />}
             </button>
-            <button
-              id="sys-surat-btn"
-              onClick={() => {
-                setSystemMode('Surat');
-                setEditingTicket(null);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                systemMode === 'Surat'
-                  ? 'bg-teal-600 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              🌴 Surat
-            </button>
+            
+            <div className="flex items-center gap-1.5">
+              <GurmystLogo size={24} className="shrink-0" />
+              <div className="flex items-center font-black text-sm tracking-tight leading-none">
+                <span className="text-red-600">G</span>
+                <span className="text-slate-950 dark:text-white">UR</span>
+                <span className="text-red-600">M</span>
+                <span className="text-slate-950 dark:text-white">YST</span>
+              </div>
+            </div>
           </div>
 
-          {/* Quick Role Toggle Option */}
-          <div className="bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl flex items-center gap-1 border border-slate-200/50 dark:border-slate-700/60">
+          {/* Right: Compact Location Switch + Role Toggle + Theme */}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* Mobile Desk Location Toggle */}
+            <div className="bg-slate-100 dark:bg-slate-800/90 p-0.5 rounded-lg flex items-center border border-slate-200/60 dark:border-slate-700/60 text-[10px] font-bold">
+              <button
+                onClick={() => { setSystemMode('RO-Ahmedabad'); setEditingTicket(null); }}
+                className={`px-1.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-0.5 ${
+                  systemMode === 'RO-Ahmedabad'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+                title="RO Ahmedabad"
+              >
+                <span>🏢</span>
+                <span>AMD</span>
+              </button>
+              <button
+                onClick={() => { setSystemMode('Surat'); setEditingTicket(null); }}
+                className={`px-1.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-0.5 ${
+                  systemMode === 'Surat'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+                title="Surat"
+              >
+                <span>🌴</span>
+                <span>SUR</span>
+              </button>
+            </div>
+
+            {/* Mobile Role Switch Button */}
             <button
-              onClick={() => { setRole('Admin'); setEditingTicket(null); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              onClick={() => {
+                setRole(role === 'Admin' ? 'Engineer' : 'Admin');
+                setEditingTicket(null);
+              }}
+              className={`p-1.5 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 cursor-pointer ${
                 role === 'Admin'
-                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-950 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-700'
+                  : 'bg-indigo-600 text-white border-indigo-600'
               }`}
+              title={`Switch Role (Current: ${role})`}
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Admin Portal
+              {role === 'Admin' ? <ShieldCheck className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+              <span>{role === 'Admin' ? 'Adm' : 'Eng'}</span>
             </button>
+
+            {/* Mobile Theme Toggle */}
             <button
-              onClick={() => { setRole('Engineer'); setEditingTicket(null); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                role === 'Engineer'
-                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-950 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-500 dark:text-slate-400 cursor-pointer shrink-0"
+              title="Toggle Theme"
+              aria-label="Toggle theme"
             >
-              <Users className="w-3.5 h-3.5" />
-              Engineer Portal
+              {darkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-slate-700" />}
             </button>
           </div>
-
-          {/* Theme Toggle Button */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-500 dark:text-slate-400"
-            title="Toggle Dark / Light Mode"
-          >
-            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
-          </button>
-
         </div>
       </header>
 
       {/* Main Structural Grid Container */}
-      <div className="flex relative">
+      <div className="flex relative w-full max-w-full">
         
-        {/* Left Navigation Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-30 border-r p-4 transition-all duration-300 transform md:sticky md:top-[73px] md:h-[calc(100vh-73px)] ${
-          darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200/60 text-slate-800'
+        {/* Navigation Sidebar / Mobile Drawer */}
+        <aside className={`fixed inset-y-0 left-0 z-50 md:z-30 border-r transition-all duration-300 transform md:sticky md:top-[57px] md:h-[calc(100vh-57px)] overflow-y-auto ${
+          darkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200/80 text-slate-800'
         } ${
           sidebarCollapsed ? 'md:w-20' : 'md:w-64'
         } ${
-          sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'
+          sidebarOpen ? 'translate-x-0 w-[290px] max-w-[85vw] shadow-2xl md:shadow-none' : '-translate-x-full md:translate-x-0'
         }`}>
-          <div className="space-y-6">
+          <div className="p-4 space-y-4 pb-28 md:pb-6">
             
+            {/* Mobile Drawer Dedicated Header Bar */}
+            <div className="flex md:hidden items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <GurmystLogo size={24} className="shrink-0" />
+                <div className="flex items-center font-black text-sm tracking-tight leading-none">
+                  <span className="text-red-600">G</span>
+                  <span className="text-slate-950 dark:text-white">UR</span>
+                  <span className="text-red-600">M</span>
+                  <span className="text-slate-950 dark:text-white">YST</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                title="Close Drawer"
+                aria-label="Close navigation drawer"
+              >
+                <X className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+              </button>
+            </div>
+
             {/* Active User Label Card */}
-            <div className={`rounded-xl border flex items-center bg-gradient-to-br ${
+            <div className={`rounded-xl border flex items-center bg-gradient-to-br transition-all ${
               darkMode ? 'from-slate-800/60 to-slate-900/60 border-slate-700/50' : 'from-slate-50 to-slate-100/50 border-slate-200/60'
             } ${
-              sidebarCollapsed ? 'justify-center p-2' : 'gap-3 p-4'
+              sidebarCollapsed ? 'justify-center p-2' : 'gap-3 p-3'
             }`} title={sidebarCollapsed ? (role === 'Admin' ? 'Helpdesk Admin' : 'Field Engineer') : undefined}>
               <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-extrabold text-sm uppercase shadow-sm shrink-0">
                 {role === 'Admin' ? 'A' : 'E'}
               </div>
               {!sidebarCollapsed && (
-                <div className="overflow-hidden">
+                <div className="overflow-hidden flex-1">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                     {role === 'Admin' ? 'Helpdesk Admin' : 'Field Engineer'}
                   </h4>
-                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider block">{role} View</span>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider block">{role} View</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">{systemMode}</span>
+                  </div>
                 </div>
               )}
+            </div>
+
+            {/* Mobile Quick Config Switches (visible in open drawer on mobile) */}
+            <div className="md:hidden space-y-2.5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/70 dark:border-slate-700/60">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Branch Helpdesk</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => { setSystemMode('RO-Ahmedabad'); setEditingTicket(null); }}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold text-center transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    systemMode === 'RO-Ahmedabad' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <span>🏢</span>
+                  <span>Ahmedabad</span>
+                </button>
+                <button
+                  onClick={() => { setSystemMode('Surat'); setEditingTicket(null); }}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold text-center transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    systemMode === 'Surat' ? 'bg-teal-600 text-white shadow-xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <span>🌴</span>
+                  <span>Surat</span>
+                </button>
+              </div>
+
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block pt-1">User Role</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => { setRole('Admin'); setEditingTicket(null); }}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold text-center transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    role === 'Admin' ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Admin</span>
+                </button>
+                <button
+                  onClick={() => { setRole('Engineer'); setEditingTicket(null); }}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold text-center transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    role === 'Engineer' ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Engineer</span>
+                </button>
+              </div>
+
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block pt-1">Theme</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => setDarkMode(false)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold text-center transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    !darkMode ? 'bg-amber-500 text-white shadow-xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <Sun className="w-3.5 h-3.5" /> Light
+                </button>
+                <button
+                  onClick={() => setDarkMode(true)}
+                  className={`py-2 px-2 rounded-lg text-xs font-bold text-center transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    darkMode ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  <Moon className="w-3.5 h-3.5" /> Dark
+                </button>
+              </div>
             </div>
  
             {/* Nav Menu Lists depending on role */}
@@ -646,9 +851,9 @@ export default function App() {
  
             {/* Static help widget */}
             {!sidebarCollapsed && (
-              <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-2 animate-fade-in">
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-1.5 animate-fade-in">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3">Need Support?</span>
-                <div className="p-3 bg-indigo-50/40 border border-indigo-50/50 dark:bg-slate-800/40 dark:border-slate-800 rounded-xl text-[10px] text-slate-500 dark:text-slate-400">
+                <div className="p-2.5 bg-indigo-50/40 border border-indigo-50/50 dark:bg-slate-800/40 dark:border-slate-800 rounded-xl text-[10px] text-slate-500 dark:text-slate-400">
                   <span className="font-bold block text-indigo-600 dark:text-indigo-400 mb-0.5">Helpdesk Quick Keys</span>
                   <p className="leading-relaxed">Press Parse to automatically run WhatsApp text through the Gemini language model modelTurn engine.</p>
                 </div>
@@ -656,27 +861,28 @@ export default function App() {
             )}
  
             {/* Gurmyst Brand Circular Logo */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center">
-              <GurmystLogo size={sidebarCollapsed ? 40 : 120} className="text-slate-900 dark:text-white transition-all duration-300" />
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center">
+              <GurmystLogo size={sidebarCollapsed ? 36 : 76} className="text-slate-900 dark:text-white transition-all duration-300" />
             </div>
- 
+
           </div>
         </aside>
 
-        {/* Sidebar Overlay (Mobile) */}
+        {/* Sidebar Backdrop Overlay (Mobile) */}
         {sidebarOpen && (
           <div 
             onClick={() => setSidebarOpen(false)}
-            className="fixed inset-0 bg-black/20 z-20 md:hidden backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-950/60 z-40 md:hidden backdrop-blur-xs transition-opacity duration-300"
+            aria-label="Close menu overlay"
           />
         )}
 
         {/* Main Workspace Stage Content Panel */}
-        <main className="flex-1 p-6 md:p-8 overflow-x-hidden min-h-[calc(100vh-73px)]">
+        <main className="flex-1 p-3 sm:p-5 md:p-8 pb-24 md:pb-8 overflow-x-hidden min-h-[calc(100vh-65px)]">
           <AnimatePresence mode="wait">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-24 space-y-3">
-                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                 <p className="text-xs font-bold text-gray-500">Contacting service desk database...</p>
               </div>
             ) : (
@@ -766,6 +972,94 @@ export default function App() {
         </main>
 
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Visible only on mobile screens < md) */}
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-30 border-t backdrop-blur-lg px-2 py-1.5 flex items-center justify-around shadow-lg ${
+        darkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'
+      }`}>
+        {role === 'Admin' ? (
+          <>
+            <button
+              onClick={() => { setActiveAdminTab('Dashboard'); setEditingTicket(null); }}
+              className={`flex flex-col items-center justify-center p-1.5 rounded-xl transition-all cursor-pointer min-w-[54px] ${
+                activeAdminTab === 'Dashboard' && !editingTicket
+                  ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 font-medium'
+              }`}
+            >
+              <LayoutDashboard className="w-5 h-5" />
+              <span className="text-[10px] mt-0.5">Overview</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveAdminTab('LiveTracker'); setEditingTicket(null); }}
+              className={`flex flex-col items-center justify-center p-1.5 rounded-xl transition-all cursor-pointer min-w-[54px] ${
+                activeAdminTab === 'LiveTracker' && !editingTicket
+                  ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 font-medium'
+              }`}
+            >
+              <Navigation className="w-5 h-5 text-emerald-500" />
+              <span className="text-[10px] mt-0.5">Radar</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveAdminTab('CreateTicket'); setEditingTicket(null); }}
+              className={`flex flex-col items-center justify-center p-1.5 rounded-xl transition-all cursor-pointer min-w-[54px] ${
+                activeAdminTab === 'CreateTicket'
+                  ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 font-medium'
+              }`}
+            >
+              <PlusCircle className="w-5 h-5 text-indigo-500" />
+              <span className="text-[10px] mt-0.5">Create</span>
+            </button>
+
+            <button
+              onClick={() => { 
+                setActiveAdminTab('TicketsList'); 
+                setEditingTicket(null);
+                setInitialStatusFilter('all');
+                setInitialDateFilter('all');
+              }}
+              className={`flex flex-col items-center justify-center p-1.5 rounded-xl transition-all cursor-pointer min-w-[54px] ${
+                activeAdminTab === 'TicketsList' && !editingTicket
+                  ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                  : 'text-slate-500 dark:text-slate-400 font-medium'
+              }`}
+            >
+              <ListTodo className="w-5 h-5" />
+              <span className="text-[10px] mt-0.5">Tickets</span>
+            </button>
+
+            <button
+              onClick={() => toggleSidebar()}
+              className="flex flex-col items-center justify-center p-1.5 rounded-xl text-slate-500 dark:text-slate-400 font-medium cursor-pointer min-w-[54px]"
+            >
+              <Menu className="w-5 h-5" />
+              <span className="text-[10px] mt-0.5">More</span>
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center justify-between w-full px-4 py-1">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                E
+              </div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                Field Engineer View
+              </span>
+            </div>
+            <button
+              onClick={() => { setRole('Admin'); }}
+              className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer flex items-center gap-1"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Switch to Admin
+            </button>
+          </div>
+        )}
+      </nav>
     </div>
   );
 }

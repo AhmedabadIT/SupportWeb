@@ -31,13 +31,13 @@ export const GurmystLogo: React.FC<LogoProps> = ({ className = '', size = 300 })
 
 export const GurmystLogoHorizontal: React.FC<LogoProps & { showTagline?: boolean }> = ({
   className = '',
-  size = 40,
+  size = 36,
   showTagline = true
 }) => {
   const [logoSrc, setLogoSrc] = React.useState<string>(getLogoUrl());
 
   return (
-    <div className={`flex items-center gap-2.5 ${className}`}>
+    <div className={`flex items-center gap-1.5 sm:gap-2.5 shrink-0 ${className}`}>
       <img
         src={logoSrc}
         alt="Gurmyst Logo"
@@ -51,16 +51,18 @@ export const GurmystLogoHorizontal: React.FC<LogoProps & { showTagline?: boolean
       />
 
       {/* Text Branding Label */}
-      <div className="flex flex-col text-left">
-        <div className="flex items-center text-md font-extrabold leading-none tracking-tight select-none">
+      <div className="flex flex-col text-left justify-center">
+        <div className="flex items-center text-sm sm:text-base font-black leading-none tracking-tight select-none">
           <span className="text-red-600">G</span>
           <span className="text-slate-950 dark:text-white">UR</span>
           <span className="text-red-600">M</span>
           <span className="text-slate-950 dark:text-white">YST</span>
-          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 ml-1.5 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md">IT Solutions</span>
+          <span className="hidden sm:inline-block text-[10px] font-bold text-slate-500 dark:text-slate-400 ml-1.5 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md">
+            IT Solutions
+          </span>
         </div>
         {showTagline && (
-          <p className="text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-1">
+          <p className="hidden md:block text-[8px] sm:text-[9px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none mt-1">
             Smart Solutions. <span className="text-red-500/90 dark:text-red-400">Stronger Tomorrow.</span>
           </p>
         )}

@@ -21,7 +21,9 @@ import {
   History,
   Calendar,
   FileText,
-  Copy
+  Copy,
+  LayoutGrid,
+  Table as TableIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -1526,12 +1528,14 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
     }
   };
 
+  const [viewLayout, setViewLayout] = useState<'table' | 'cards'>('cards');
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full max-w-full overflow-x-hidden">
       {/* Search and Action Header */}
-      <div className="flex flex-col lg:flex-row gap-3 justify-between items-stretch">
+      <div className="flex flex-col lg:flex-row gap-3 justify-between items-stretch w-full max-w-full">
         {/* Search & Status Filter Group */}
-        <div className="flex flex-col sm:flex-row gap-3 flex-1">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-1 min-w-0">
           {/* Search Bar */}
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
@@ -1555,7 +1559,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
           </div>
 
           {/* Quick Status Dropdown */}
-          <div className="relative min-w-[160px]">
+          <div className="relative min-w-[140px] sm:min-w-[160px]">
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
@@ -1577,22 +1581,52 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
         </div>
 
         {/* Action Panel Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+          {/* Card / Table View Toggle on Mobile & Tablet */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => setViewLayout('cards')}
+              className={`p-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                viewLayout === 'cards'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Card View (Mobile Friendly)"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              <span className="hidden sm:inline">Cards</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewLayout('table')}
+              className={`p-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                viewLayout === 'table'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Full Table View"
+            >
+              <TableIcon className="w-4 h-4" />
+              <span className="hidden sm:inline">Table</span>
+            </button>
+          </div>
+
           <button
             onClick={() => setShowFilters(prev => !showFilters)}
-            className={`px-4 py-2.5 rounded-xl border text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
               showFilters || dateFilter !== 'all' || statusFilter !== 'all' || locationFilter !== 'all' || productFilter !== 'all' || engineerFilter !== 'all'
                 ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-900/40 text-indigo-700 dark:text-indigo-400'
                 : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
             }`}
           >
             <SlidersHorizontal className="w-4 h-4" />
-            Filters
+            <span>Filters</span>
           </button>
 
           <button
             onClick={handleExportExcel}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-2 text-sm font-bold cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer"
             title="Export to Excel (.xlsx)"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
@@ -1601,7 +1635,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
 
           <button
             onClick={handleExportCSV}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-2 text-sm font-bold cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer"
             title="Export to standard CSV"
           >
             <Download className="w-4 h-4 text-teal-600" />
@@ -1610,7 +1644,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
 
           <button
             onClick={handleCopyAsTabular}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-2 text-sm font-bold cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer"
             id="copy-tabular-data-btn"
             title="Copy visible tickets to clipboard as tab-separated spreadsheet data"
           >
@@ -1620,7 +1654,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
 
           <button
             onClick={() => setShowImportModal(true)}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-2 text-sm font-bold cursor-pointer font-sans"
+            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer"
             title="Import from Excel or Paste raw spreadsheet rows"
           >
             <Upload className="w-4 h-4 text-indigo-600" />
@@ -1629,29 +1663,29 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
 
           <button
             onClick={handlePrint}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-2 text-sm font-bold cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer"
             title="Print / PDF Export"
           >
             <Printer className="w-4 h-4 text-indigo-600" />
-            <span className="hidden md:inline">Print / PDF</span>
+            <span className="hidden md:inline">Print</span>
           </button>
 
           <button
             onClick={() => setShowLogsReportModal(true)}
-            className="p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 flex items-center gap-2 text-sm font-bold cursor-pointer transition-all"
-            title="View Ticket Logs & Print Reports (Month-wise / Quarter-wise)"
+            className="p-2 sm:p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer transition-all"
+            title="View Ticket Logs & Print Reports"
           >
             <History className="w-4 h-4 text-indigo-600" />
-            <span className="hidden md:inline">View & Print Logs</span>
+            <span className="hidden md:inline">Logs</span>
           </button>
 
           <button
             onClick={() => setShowDeleteAllConfirm(true)}
-            className="p-2.5 rounded-xl border border-rose-200 dark:border-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-2 text-sm font-bold cursor-pointer transition-all"
+            className="p-2 sm:p-2.5 rounded-xl border border-rose-200 dark:border-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer transition-all"
             title="Delete All Ticket Logs"
           >
             <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-            <span className="hidden md:inline">Delete All Logs</span>
+            <span className="hidden md:inline">Delete All</span>
           </button>
         </div>
       </div>
@@ -1885,179 +1919,351 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
         )}
       </div>
 
-      {/* Main Table Card */}
+      {/* Main Table or Card List */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left text-slate-600 dark:text-slate-400">
-            <thead className="text-[10px] text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800/60 whitespace-nowrap">
-              <tr>
-                <th className="px-3 py-3 text-center font-bold">Sr No</th>
-                <th className="px-3 py-3 text-center font-bold w-10">
-                  <input
-                    type="checkbox"
-                    checked={paginatedTickets.length > 0 && paginatedTickets.every(t => selectedTicketIds.includes(t.id))}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        const newSelected = Array.from(new Set([...selectedTicketIds, ...paginatedTickets.map(t => t.id)]));
-                        setSelectedTicketIds(newSelected);
-                      } else {
-                        const paginatedIds = paginatedTickets.map(t => t.id);
-                        setSelectedTicketIds(selectedTicketIds.filter(id => !paginatedIds.includes(id)));
-                      }
-                    }}
-                    className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
-                  />
-                </th>
-                <th onClick={() => handleSort('ticket_id')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
-                  Ticket Number {sortField === 'ticket_id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th onClick={() => handleSort('date')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
-                  Date {sortField === 'date' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th onClick={() => handleSort('username')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
-                  Username {sortField === 'username' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th className="px-3 py-3 font-bold">Contact Number</th>
-                <th onClick={() => handleSort('location')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
-                  Location/ Address {sortField === 'location' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th className="px-3 py-3 font-bold">Product</th>
-                <th className="px-3 py-3 font-bold">Category</th>
-                <th className="px-3 py-3 font-bold">Model</th>
-                <th className="px-3 py-3 font-bold">System Sr no.</th>
-                <th className="px-3 py-3 font-bold">Problem</th>
-                <th onClick={() => handleSort('engineer')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
-                  Assign to {sortField === 'engineer' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th className="px-3 py-3 font-bold">Action Taken</th>
-                <th className="px-3 py-3 font-bold">First Visit Date</th>
-                <th className="px-3 py-3 font-bold">Hold Date</th>
-                <th className="px-3 py-3 font-bold">Close Date</th>
-                <th onClick={() => handleSort('status')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors text-center">
-                  Status {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th className="px-3 py-3 font-bold">Remark of Engineer</th>
-                <th onClick={() => handleSort('resolution_days')} className="px-3 py-3 font-bold text-center cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors whitespace-nowrap" title="Click to sort by calculated days between First Visit Date & Close Date">
-                  Resolution Days {sortField === 'resolution_days' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th className="px-3 py-3 font-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 whitespace-nowrap">
-              {paginatedTickets.length === 0 ? (
-                <tr>
-                  <td colSpan={20} className="text-center py-12 text-slate-400 dark:text-slate-500 font-medium">
-                    No tickets found matching your query.
-                  </td>
-                </tr>
-              ) : (
-                paginatedTickets.map((t, idx) => {
+        {/* Card View (Mobile / Tablet Friendly) */}
+        {viewLayout === 'cards' ? (
+          <div className="p-3 sm:p-4 divide-y divide-slate-100 dark:divide-slate-800/60">
+            {paginatedTickets.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 dark:text-slate-500 font-medium text-sm">
+                No tickets found matching your query.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                {paginatedTickets.map((t, idx) => {
                   const globalIndex = (currentPage - 1) * itemsPerPage + idx + 1;
+                  const dateDiff = calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status);
+                  const isSelected = selectedTicketIds.includes(t.id);
+
                   return (
-                    <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors align-top text-[11px]">
-                      <td className="px-3 py-4 text-center text-slate-400 font-medium">{globalIndex}</td>
-                      <td className="px-3 py-4 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedTicketIds.includes(t.id)}
-                          onChange={(e) => {
-                            const isChecked = e.target.checked;
-                            let updated: string[];
-                            if (isChecked) {
-                              updated = [...selectedTicketIds, t.id];
-                              navigator.clipboard.writeText(t.ticket_id)
-                                .then(() => {
-                                  showToast(`Ticket ID ${t.ticket_id} copied to clipboard!`, 'success');
-                                })
-                                .catch(err => console.error('Failed to copy: ', err));
-                            } else {
-                              updated = selectedTicketIds.filter(id => id !== t.id);
-                            }
-                            setSelectedTicketIds(updated);
-                          }}
-                          className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
-                        />
-                      </td>
-                      <td className="px-3 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                        <div className="flex items-center gap-1.5 group select-all">
-                          <span>{t.ticket_id}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyDetails(t)}
-                            className="p-1 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all cursor-pointer"
-                            title="Copy full ticket details"
-                          >
-                            {copiedTicketId === t.id ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                            ) : (
-                              <Copy className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.date}</td>
-                      <td className="px-3 py-4 font-bold text-slate-800 dark:text-slate-200">{t.username}</td>
-                      <td className="px-3 py-4 font-semibold text-slate-600 dark:text-slate-400">{t.contact}</td>
-                      <td className="px-3 py-4 text-slate-700 dark:text-slate-300 max-w-[150px] truncate" title={t.location}>{t.location}</td>
-                      <td className="px-3 py-4 font-bold text-slate-800 dark:text-slate-200">{t.product || 'Other'}</td>
-                      <td className="px-3 py-4 text-slate-600 dark:text-slate-400">{t.category || 'Other'}</td>
-                      <td className="px-3 py-4 text-slate-600 dark:text-slate-400">{t.model || 'N/A'}</td>
-                      <td className="px-3 py-4 font-mono text-slate-500 dark:text-slate-400">{t.serial_number || 'N/A'}</td>
-                      <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.problem}>{t.problem}</td>
-                      <td className="px-3 py-4 font-bold text-slate-700 dark:text-slate-300">{t.engineer || 'Unassigned'}</td>
-                      <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.action_taken}>{t.action_taken || 'N/A'}</td>
-                      <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.first_visit_date || 'N/A'}</td>
-                      <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.hold_date || 'N/A'}</td>
-                      <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.close_date || 'N/A'}</td>
-                      <td className="px-3 py-4 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                          t.status && t.status.trim().toLowerCase() === 'open' ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50 dark:border-indigo-950/50' :
-                          t.status && t.status.trim().toLowerCase() === 'hold' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border border-purple-100/50 dark:border-purple-950/50' :
-                          'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-950/50'
-                        }`}>
-                          ● {t.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.engineer_remark}>{t.engineer_remark || 'N/A'}</td>
-                      <td className="px-3 py-4 text-center whitespace-nowrap">
-                        {(() => {
-                          const dateDiff = calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status);
-                          return (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${dateDiff.badgeClass}`}>
-                              {dateDiff.text}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 py-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => onEditTicket(t)}
-                            className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
-                            title="Edit Ticket"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setTicketToDelete(t);
-                              setDeleteConfirmCheckbox(false);
-                              setDeleteConfirmText('');
+                    <div
+                      key={t.id}
+                      className={`p-3.5 rounded-xl border transition-all text-xs flex flex-col justify-between gap-3 ${
+                        isSelected
+                          ? 'bg-indigo-50/40 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800'
+                          : 'bg-slate-50/40 dark:bg-slate-800/30 border-slate-200/70 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Card Header: Checkbox, Index, TID & Status */}
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800/60 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const isChecked = e.target.checked;
+                              let updated: string[];
+                              if (isChecked) {
+                                updated = [...selectedTicketIds, t.id];
+                                navigator.clipboard.writeText(t.ticket_id)
+                                  .then(() => {
+                                    showToast(`Ticket ID ${t.ticket_id} copied!`, 'success');
+                                  })
+                                  .catch(() => {});
+                              } else {
+                                updated = selectedTicketIds.filter(id => id !== t.id);
+                              }
+                              setSelectedTicketIds(updated);
                             }}
-                            className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
-                            title="Remove Ticket"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                          />
+                          <span className="text-[10px] font-mono text-slate-400">#{globalIndex}</span>
+                          <div className="flex items-center gap-1 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            <span>{t.ticket_id}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDetails(t)}
+                              className="p-1 rounded text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                              title="Copy Ticket Details"
+                            >
+                              {copiedTicketId === t.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            t.status && t.status.trim().toLowerCase() === 'open' ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50' :
+                            t.status && t.status.trim().toLowerCase() === 'hold' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border border-purple-100/50' :
+                            'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100/50'
+                          }`}>
+                            ● {t.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Requester & Location */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{t.username}</span>
+                          <a
+                            href={`tel:${t.contact}`}
+                            className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                          >
+                            {t.contact}
+                          </a>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                          <span className="text-slate-400">Location:</span> {t.location}
+                        </p>
+                      </div>
+
+                      {/* Equipment Details */}
+                      <div className="bg-white dark:bg-slate-900/80 p-2 rounded-lg border border-slate-200/60 dark:border-slate-800/60 text-[11px] space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Hardware:</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">{t.product || 'Other'} ({t.category || 'Other'})</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Model:</span>
+                          <span className="text-slate-600 dark:text-slate-400">{t.model || 'N/A'}</span>
+                        </div>
+                        {t.serial_number && (
+                          <div className="flex justify-between font-mono text-[10px]">
+                            <span className="text-slate-400">Sr No:</span>
+                            <span className="text-slate-600 dark:text-slate-400">{t.serial_number}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Problem & Action Taken */}
+                      <div className="space-y-1 text-[11px]">
+                        <p className="text-slate-700 dark:text-slate-300 font-medium">
+                          <span className="text-slate-400">Problem:</span> {t.problem}
+                        </p>
+                        {t.action_taken && (
+                          <p className="text-slate-600 dark:text-slate-400">
+                            <span className="text-slate-400">Action:</span> {t.action_taken}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Engineer & Dates Footer */}
+                      <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-between text-[11px]">
+                        <div>
+                          <span className="text-slate-400">Assigned: </span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">{t.engineer || 'Unassigned'}</span>
+                        </div>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${dateDiff.badgeClass}`}>
+                          {dateDiff.text}
+                        </span>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyDetails(t)}
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Copy Log</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onEditTicket(t)}
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTicketToDelete(t);
+                            setDeleteConfirmCheckbox(false);
+                            setDeleteConfirmText('');
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg cursor-pointer"
+                          title="Delete Ticket"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Full Table View */
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left text-slate-600 dark:text-slate-400">
+              <thead className="text-[10px] text-slate-500 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800/60 whitespace-nowrap">
+                <tr>
+                  <th className="px-3 py-3 text-center font-bold">Sr No</th>
+                  <th className="px-3 py-3 text-center font-bold w-10">
+                    <input
+                      type="checkbox"
+                      checked={paginatedTickets.length > 0 && paginatedTickets.every(t => selectedTicketIds.includes(t.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const newSelected = Array.from(new Set([...selectedTicketIds, ...paginatedTickets.map(t => t.id)]));
+                          setSelectedTicketIds(newSelected);
+                        } else {
+                          const paginatedIds = paginatedTickets.map(t => t.id);
+                          setSelectedTicketIds(selectedTicketIds.filter(id => !paginatedIds.includes(id)));
+                        }
+                      }}
+                      className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+                    />
+                  </th>
+                  <th onClick={() => handleSort('ticket_id')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                    Ticket Number {sortField === 'ticket_id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('date')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                    Date {sortField === 'date' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th onClick={() => handleSort('username')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                    Username {sortField === 'username' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="px-3 py-3 font-bold">Contact Number</th>
+                  <th onClick={() => handleSort('location')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                    Location/ Address {sortField === 'location' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="px-3 py-3 font-bold">Product</th>
+                  <th className="px-3 py-3 font-bold">Category</th>
+                  <th className="px-3 py-3 font-bold">Model</th>
+                  <th className="px-3 py-3 font-bold">System Sr no.</th>
+                  <th className="px-3 py-3 font-bold">Problem</th>
+                  <th onClick={() => handleSort('engineer')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors">
+                    Assign to {sortField === 'engineer' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="px-3 py-3 font-bold">Action Taken</th>
+                  <th className="px-3 py-3 font-bold">First Visit Date</th>
+                  <th className="px-3 py-3 font-bold">Hold Date</th>
+                  <th className="px-3 py-3 font-bold">Close Date</th>
+                  <th onClick={() => handleSort('status')} className="px-3 py-3 font-bold cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors text-center">
+                    Status {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="px-3 py-3 font-bold">Remark of Engineer</th>
+                  <th onClick={() => handleSort('resolution_days')} className="px-3 py-3 font-bold text-center cursor-pointer hover:bg-slate-100/40 dark:hover:bg-slate-800/40 transition-colors whitespace-nowrap" title="Click to sort by calculated days between First Visit Date & Close Date">
+                    Resolution Days {sortField === 'resolution_days' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                  </th>
+                  <th className="px-3 py-3 font-bold text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 whitespace-nowrap">
+                {paginatedTickets.length === 0 ? (
+                  <tr>
+                    <td colSpan={20} className="text-center py-12 text-slate-400 dark:text-slate-500 font-medium">
+                      No tickets found matching your query.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedTickets.map((t, idx) => {
+                    const globalIndex = (currentPage - 1) * itemsPerPage + idx + 1;
+                    return (
+                      <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors align-top text-[11px]">
+                        <td className="px-3 py-4 text-center text-slate-400 font-medium">{globalIndex}</td>
+                        <td className="px-3 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedTicketIds.includes(t.id)}
+                            onChange={(e) => {
+                              const isChecked = e.target.checked;
+                              let updated: string[];
+                              if (isChecked) {
+                                updated = [...selectedTicketIds, t.id];
+                                navigator.clipboard.writeText(t.ticket_id)
+                                  .then(() => {
+                                    showToast(`Ticket ID ${t.ticket_id} copied to clipboard!`, 'success');
+                                  })
+                                  .catch(err => console.error('Failed to copy: ', err));
+                              } else {
+                                updated = selectedTicketIds.filter(id => id !== t.id);
+                              }
+                              setSelectedTicketIds(updated);
+                            }}
+                            className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-3 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          <div className="flex items-center gap-1.5 group select-all">
+                            <span>{t.ticket_id}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDetails(t)}
+                              className="p-1 rounded-md text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all cursor-pointer"
+                              title="Copy full ticket details"
+                            >
+                              {copiedTicketId === t.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.date}</td>
+                        <td className="px-3 py-4 font-bold text-slate-800 dark:text-slate-200">{t.username}</td>
+                        <td className="px-3 py-4 font-semibold text-slate-600 dark:text-slate-400">{t.contact}</td>
+                        <td className="px-3 py-4 text-slate-700 dark:text-slate-300 max-w-[150px] truncate" title={t.location}>{t.location}</td>
+                        <td className="px-3 py-4 font-bold text-slate-800 dark:text-slate-200">{t.product || 'Other'}</td>
+                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400">{t.category || 'Other'}</td>
+                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400">{t.model || 'N/A'}</td>
+                        <td className="px-3 py-4 font-mono text-slate-500 dark:text-slate-400">{t.serial_number || 'N/A'}</td>
+                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.problem}>{t.problem}</td>
+                        <td className="px-3 py-4 font-bold text-slate-700 dark:text-slate-300">{t.engineer || 'Unassigned'}</td>
+                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.action_taken}>{t.action_taken || 'N/A'}</td>
+                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.first_visit_date || 'N/A'}</td>
+                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.hold_date || 'N/A'}</td>
+                        <td className="px-3 py-4 text-slate-500 dark:text-slate-400">{t.close_date || 'N/A'}</td>
+                        <td className="px-3 py-4 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            t.status && t.status.trim().toLowerCase() === 'open' ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50 dark:border-indigo-950/50' :
+                            t.status && t.status.trim().toLowerCase() === 'hold' ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 border border-purple-100/50 dark:border-purple-950/50' :
+                            'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-950/50'
+                          }`}>
+                            ● {t.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-4 text-slate-600 dark:text-slate-400 max-w-[150px] truncate" title={t.engineer_remark}>{t.engineer_remark || 'N/A'}</td>
+                        <td className="px-3 py-4 text-center whitespace-nowrap">
+                          {(() => {
+                            const dateDiff = calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status);
+                            return (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${dateDiff.badgeClass}`}>
+                                {dateDiff.text}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-3 py-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => onEditTicket(t)}
+                              className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all cursor-pointer"
+                              title="Edit Ticket"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setTicketToDelete(t);
+                                setDeleteConfirmCheckbox(false);
+                                setDeleteConfirmText('');
+                              }}
+                              className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-all cursor-pointer"
+                              title="Remove Ticket"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination & Summary Panel */}
         {filteredAndSortedTickets.length > 0 && (
