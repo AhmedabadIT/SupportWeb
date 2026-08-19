@@ -159,15 +159,36 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
       console.log('Using local TID generator');
     }
 
-    // Local TID Generator fallback
-    const targetDate = forDate || new Date().toISOString().split('T')[0];
-    const [y, m, d] = targetDate.split('-');
-    const datePrefix = `${(y || '26').slice(-2)}${m || '01'}${d || '01'}`;
-    const prefix = systemMode === 'Surat' ? `SUR-${datePrefix}-` : `${datePrefix}-`;
+    // Standard YYYYMMNNN TID Generator matching DBService specification
+    const targetDate = forDate ? new Date(forDate) : new Date();
+    let year = targetDate.getFullYear();
+    let month = targetDate.getMonth() + 1;
+    if (isNaN(year) || isNaN(month)) {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+    const yyyy = year.toString();
+    const mm = month.toString().padStart(2, '0');
+    const datePart = `${yyyy}${mm}`; // E.g., '202608'
+
+    const isSurat = systemMode === 'Surat';
+    const prefix = isSurat ? `sur-${datePart}` : datePart;
+
     const cachedTickets: any[] = JSON.parse(localStorage.getItem('cached_tickets') || '[]');
-    const matching = cachedTickets.filter(t => t.ticket_id?.toUpperCase().startsWith(prefix));
-    const nextNum = (matching.length + 1).toString().padStart(2, '0');
-    const localNextTid = `${prefix}${nextNum}`;
+    let highestNNN = 0;
+    for (const ticket of cachedTickets) {
+      if (ticket.ticket_id && ticket.ticket_id.toLowerCase().startsWith(prefix.toLowerCase())) {
+        const numPart = ticket.ticket_id.substring(prefix.length);
+        const num = parseInt(numPart, 10);
+        if (!isNaN(num) && num > highestNNN) {
+          highestNNN = num;
+        }
+      }
+    }
+
+    const nextNNN = (highestNNN + 1).toString().padStart(3, '0');
+    const localNextTid = `${prefix}${nextNNN}`;
     setSuggestedTid(localNextTid);
     if (!isTidManuallyEdited) {
       setTid(localNextTid);
@@ -202,6 +223,164 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
     fetchNextTID(today);
   };
 
+  const parseMessageData = (inputText: string) => {
+    const text = (inputText || '').trim();
+    if (!text) return null;
+
+    // Extract Contact
+    let contact = '';
+    const phoneMatch = text.match(/(?:Contact(?:\s*No|\s*Number)?|Phone(?:\s*No|\s*Number)?|Mobile(?:\s*No|\s*Number)?|Mo\b|Mob\b|Ph\b|No\b)\s*[:=-]?\s*([0-9+\s-]{10,14})/i);
+    if (phoneMatch) {
+      contact = phoneMatch[1].replace(/[\s-]/g, '');
+    } else {
+      const genericPhone = text.match(/(?:(?:\+91|91|0)?[\s-]?)?([6-9]\d{9})/);
+      if (genericPhone) {
+        contact = genericPhone[1];
+      }
+    }
+
+    // Extract User Name
+    let username = '';
+    const nameMatch = text.match(/(?:User\s*Name|User_name|Username|User|Name|Doctor|Dr\.|Officer|Staff|Person|Contact\s*Person)\s*[:=-]\s*([^\n\r]+)/i);
+    if (nameMatch) {
+      username = nameMatch[1].trim();
+    }
+
+    // Extract Location
+    let location = '';
+    const locMatch = text.match(/(?:Location|Branch\s*Office|Hospital|Center|Centre|Branch|Office|Dept|Place|BO)\s*[:=-]\s*([^\n\r]+)/i);
+    if (locMatch) {
+      location = locMatch[1].trim();
+    } else {
+      const boLine = text.match(/(?:^|\n)\s*(BO\s+[^\n\r]+)/i);
+      if (boLine) {
+        location = boLine[1].trim();
+      }
+    }
+    if (!location && systemMode === 'Surat') {
+      location = 'Surat';
+    }
+
+    // Extract Make / Model
+    let rawMake = '';
+    const makeMatch = text.match(/(?:Make|Model|Device|Machine|Brand|Hardware|Item|Equipment|Product\s*Model)\s*[:=-]\s*([^\n\r]+)/i);
+    if (makeMatch) {
+      rawMake = makeMatch[1].trim();
+    }
+
+    // Extract Serial Number
+    let serialNumber = '';
+    const snMatch = text.match(/(?:Serial\s*(?:no|num|number)?|S\/?N|SN|Sr\s*no|Tag\s*(?:no)?|Service\s*Tag)\s*[:=-]\s*([A-Za-z0-9_-]+)/i);
+    if (snMatch) {
+      serialNumber = snMatch[1].trim();
+    }
+
+    // Extract Problem Description
+    let problem = '';
+    const probMatch = text.match(/(?:Problem|Issue|Fault|Complaint|Error|Defect|Reason|Description|Remark)\s*[:=-]\s*([^\n\r]+)/i);
+    if (probMatch) {
+      problem = probMatch[1].trim();
+    } else {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      const unassigned = lines.filter(l => !l.includes(':') && !l.includes('=') && !l.match(/^[0-9+\s-]{10,14}$/));
+      if (unassigned.length > 0) {
+        problem = unassigned[unassigned.length - 1];
+      }
+    }
+
+    // Infer Product & Brand
+    let detectedProduct = 'AIO';
+    let detectedBrand = '';
+    const lower = (text + ' ' + rawMake).toLowerCase();
+
+    if (lower.includes('hl 2080') || lower.includes('2080') || lower.includes('7535') || lower.includes('printer') || lower.includes('laserjet') || lower.includes('deskjet') || lower.includes('printing')) {
+      detectedProduct = 'Printer';
+      if (lower.includes('brother')) detectedBrand = 'Brother';
+      else if (lower.includes('hp')) detectedBrand = 'HP';
+      else if (lower.includes('canon')) detectedBrand = 'Canon';
+      else if (lower.includes('epson')) detectedBrand = 'Epson';
+    } else if (lower.includes('switch') || lower.includes('cisco') || lower.includes('3750') || lower.includes('2960')) {
+      detectedProduct = 'Switch';
+      detectedBrand = 'Cisco';
+    } else if (lower.includes('scanner')) {
+      detectedProduct = 'Scanner';
+    } else if (lower.includes('laptop')) {
+      detectedProduct = 'Laptop';
+    } else if (lower.includes('mouse')) {
+      detectedProduct = 'Mouse';
+    } else if (lower.includes('keyboard')) {
+      detectedProduct = 'Keyboard';
+    } else if (lower.includes('ups') || lower.includes('power')) {
+      detectedProduct = 'UPS';
+    } else if (lower.includes('cctv') || lower.includes('camera') || lower.includes('nvr') || lower.includes('dvr')) {
+      detectedProduct = 'CCTV';
+    } else {
+      detectedProduct = 'AIO';
+    }
+
+    if (!detectedBrand) {
+      if (lower.includes('brother')) detectedBrand = 'Brother';
+      else if (lower.includes('dell')) detectedBrand = 'Dell';
+      else if (lower.includes('hp') || lower.includes('hewlett')) detectedBrand = 'HP';
+      else if (lower.includes('lenovo')) detectedBrand = 'Lenovo';
+      else if (lower.includes('acer')) detectedBrand = 'Acer';
+      else if (lower.includes('cisco')) detectedBrand = 'Cisco';
+      else if (lower.includes('canon')) detectedBrand = 'Canon';
+      else if (lower.includes('epson')) detectedBrand = 'Epson';
+    }
+
+    const normalized = normalizeModelString(rawMake, detectedProduct, detectedBrand, text);
+
+    return {
+      location,
+      username,
+      contact,
+      brand: normalized.brand || detectedBrand,
+      model: normalized.model || rawMake,
+      serial_number: serialNumber,
+      problem: problem || 'Not working',
+      product: normalized.product || detectedProduct || 'AIO',
+      category: normalized.category || (detectedProduct ? detectedProduct.toUpperCase() : 'HARDWARE')
+    };
+  };
+
+  const applyParsedData = (data: any, elapsedSec?: string) => {
+    if (!data) return;
+
+    if (data.location) setLocation(data.location);
+    if (data.username) setUsername(data.username);
+    if (data.contact) setContact(data.contact);
+    if (data.brand) setBrand(data.brand);
+    if (data.model) setModel(data.model);
+    if (data.serial_number) setSerialNumber(data.serial_number);
+    if (data.problem) setProblem(data.problem);
+    if (data.product) setProduct(data.product);
+    if (data.category) setCategory(data.category);
+
+    // Auto-assign engineer if not assigned
+    if (data.location) {
+      const locLower = data.location.toLowerCase();
+      if (locLower.includes('surat')) {
+        setEngineer('Mayur Ahir');
+      } else if (locLower.includes('rajkot')) {
+        setEngineer('Sudhir Kuvardiya');
+      } else if (locLower.includes('jamnagar')) {
+        setEngineer('Parag');
+      } else if (locLower.includes('bhavnagar')) {
+        setEngineer('Amit Acharya');
+      } else if (locLower.includes('kalol')) {
+        setEngineer('Saifuddin Momin');
+      } else if (!engineer && defaultEngineer) {
+        setEngineer(defaultEngineer);
+      } else if (!engineer) {
+        setEngineer('Mahebub Mir');
+      }
+    }
+
+    setTouched(true);
+    showToast(`WhatsApp details parsed successfully${elapsedSec ? ` in ${elapsedSec}s` : ''}!`, 'success');
+  };
+
   const handleAIParse = async () => {
     if (!whatsappInput.trim()) {
       showToast('Please paste a WhatsApp message first!', 'error');
@@ -224,73 +403,40 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
           data = await response.json();
         }
       } catch (err) {
-        console.log('Falling back to client-side WhatsApp parser');
+        console.log('Using client-side WhatsApp parser');
       }
 
-      // Client-side regex parser fallback if server is offline or on GitHub Pages
+      // Fast, deterministic client-side parser fallback
       if (!data) {
-        const text = whatsappInput;
-        const phoneMatch = text.match(/(?:(?:(?:\+91|91|0)?[\s-]?)?[6-9]\d{9})/);
-        const nameMatch = text.match(/(?:Name|User|Staff|Person|Doctor|Dr\.|Officer)[:\s]*([^\n,\r]+)/i);
-        const locMatch = text.match(/(?:Location|Hospital|Center|Centre|Branch|Room|Ward|Dept|Office|Building)[:\s]*([^\n,\r]+)/i);
-        const probMatch = text.match(/(?:Problem|Issue|Fault|Complaint|Error|Not Working|Defect)[:\s]*([^\n\r]+)/i);
-        const snMatch = text.match(/(?:S\/N|Serial|Serial No|SN|Tag)[:\s]*([A-Za-z0-9_-]+)/i);
-
-        let detectedProduct = 'AIO';
-        if (/laptop/i.test(text)) detectedProduct = 'Laptop';
-        else if (/desktop|cpu|tower/i.test(text)) detectedProduct = 'Desktop';
-        else if (/printer|laserjet|deskjet/i.test(text)) detectedProduct = 'Printer';
-        else if (/scanner/i.test(text)) detectedProduct = 'Scanner';
-        else if (/cctv|camera|nvr|dvr/i.test(text)) detectedProduct = 'CCTV';
-
-        let detectedBrand = '';
-        if (/dell/i.test(text)) detectedBrand = 'Dell';
-        else if (/hp|hewlett/i.test(text)) detectedBrand = 'HP';
-        else if (/lenovo/i.test(text)) detectedBrand = 'Lenovo';
-        else if (/canon/i.test(text)) detectedBrand = 'Canon';
-        else if (/epson/i.test(text)) detectedBrand = 'Epson';
-
-        data = {
-          username: nameMatch ? nameMatch[1].trim() : '',
-          contact: phoneMatch ? phoneMatch[0].replace(/[\s-]/g, '') : '',
-          location: locMatch ? locMatch[1].trim() : (systemMode === 'Surat' ? 'Surat' : ''),
-          problem: probMatch ? probMatch[1].trim() : text.slice(0, 100),
-          serial_number: snMatch ? snMatch[1].trim() : '',
-          product: detectedProduct,
-          brand: detectedBrand,
-          category: 'Hardware',
-          model: ''
-        };
+        data = parseMessageData(whatsappInput);
       }
 
-      // Normalize hardware model aliases
-      const normalized = normalizeModelString(
-        data.model,
-        data.product,
-        data.brand,
-        whatsappInput
-      );
-
-      // Auto-populate extracted data
-      setLocation(data.location || '');
-      setUsername(data.username || '');
-      setContact(data.contact || '');
-      setBrand(normalized.brand || data.brand || '');
-      setModel(normalized.model || data.model || '');
-      setSerialNumber(data.serial_number || '');
-      setProblem(data.problem || '');
-      setProduct(normalized.product || data.product || '');
-      setCategory(normalized.category || data.category || '');
-
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      showToast(`AI Parsing finished successfully in ${elapsed}s!`, 'success');
-      setTouched(true); // Trigger highlights for any missing items
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+      applyParsedData(data, elapsed);
 
     } catch (err: any) {
       console.error(err);
-      showToast(err.message || 'AI parsing failed. Please input fields manually.', 'error');
+      const fallbackData = parseMessageData(whatsappInput);
+      if (fallbackData) {
+        applyParsedData(fallbackData, '0.1');
+      } else {
+        showToast('Parsing failed. Please input fields manually.', 'error');
+      }
     } finally {
       setIsParsing(false);
+    }
+  };
+
+  const handleTextareaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    if (pasted && pasted.trim()) {
+      setWhatsappInput(pasted);
+      const data = parseMessageData(pasted);
+      if (data) {
+        setTimeout(() => {
+          applyParsedData(data, '0.05');
+        }, 100);
+      }
     }
   };
 
@@ -481,6 +627,7 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
               rows={8}
               value={whatsappInput}
               onChange={(e) => setWhatsappInput(e.target.value)}
+              onPaste={handleTextareaPaste}
               placeholder="Paste WhatsApp message here...&#10;&#10;Location : BO DARIYAPUR&#10;User name : Anaya devrakhakar&#10;Make : BROTHER HL 2080DW&#10;Serial no : E78341F1N313961&#10;Problem : PRINTER NOT WORKING&#10;Contact : 9869006584"
               className="w-full text-sm p-3 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-mono focus:outline-none"
             />
