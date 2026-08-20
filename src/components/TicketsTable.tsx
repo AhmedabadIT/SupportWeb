@@ -158,6 +158,15 @@ export const compareTicketsAscending = (a: Ticket, b: Ticket): number => {
   return 0;
 };
 
+export const formatEngineerShortName = (name?: string | null): string => {
+  if (!name) return '';
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === 'Unassigned' || trimmed === 'N/A') return trimmed;
+  // In ticket log copy, use the half/first name of engineer (e.g. "Sudhir Kuvardiya" -> "Sudhir", "Mayank Shravak" -> "Mayank")
+  const parts = trimmed.split(/\s+/);
+  return parts[0] || trimmed;
+};
+
 const formatTicketHorizontal = (t: Ticket): string => {
   const tid = t.ticket_id || '';
   const dateVal = t.date || '';
@@ -169,7 +178,7 @@ const formatTicketHorizontal = (t: Ticket): string => {
   const modelVal = t.model || '';
   const serialVal = t.serial_number || '';
   const problemVal = t.problem || '';
-  const engineerVal = t.engineer || '';
+  const engineerVal = formatEngineerShortName(t.engineer);
   const actionVal = (t.action_taken === 'N/A' || !t.action_taken) ? '' : t.action_taken;
   const firstVisitVal = t.first_visit_date || '';
   const holdVal = t.hold_date || '';
@@ -525,7 +534,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       'Model': t.model || '',
       'Serial Number': t.serial_number || '',
       'Problem': t.problem,
-      'Engineer': t.engineer,
+      'Engineer': formatEngineerShortName(t.engineer),
       'Status': t.status,
       'Action Taken': t.action_taken || '',
       'First Visit Date': t.first_visit_date || '',
@@ -598,7 +607,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       escapeCSV(t.model || ''),
       escapeCSV(t.serial_number || ''),
       escapeCSV(t.problem),
-      escapeCSV(t.engineer),
+      escapeCSV(formatEngineerShortName(t.engineer)),
       escapeCSV(t.status),
       escapeCSV(t.action_taken || ''),
       escapeCSV(t.first_visit_date || ''),
@@ -668,7 +677,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       const modelVal = t.model || '';
       const serialVal = t.serial_number || '';
       const problemVal = t.problem || '';
-      const engineerVal = t.engineer || '';
+      const engineerVal = formatEngineerShortName(t.engineer);
       const actionVal = (t.action_taken === 'N/A' || !t.action_taken) ? '' : t.action_taken;
       const firstVisitVal = t.first_visit_date || '';
       const holdVal = t.hold_date || '';
@@ -2944,7 +2953,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                               t.model || '',
                               t.serial_number || '',
                               t.problem || '',
-                              t.engineer || '',
+                              formatEngineerShortName(t.engineer),
                               (t.action_taken === 'N/A' || !t.action_taken) ? '' : t.action_taken,
                               t.first_visit_date || '',
                               t.hold_date || '',

@@ -1,6 +1,9 @@
 export interface Engineer {
   id: string;
   name: string;
+  emp_code?: string;
+  name_as_per_bank?: string;
+  designation?: string;
   mobile: string;
   email: string;
   active: boolean;
@@ -15,6 +18,9 @@ export interface Engineer {
   experience?: string;
   photo?: string; // Base64 or image URL
   joining_date?: string;
+  paid_leaves_taken?: number;
+  lwp_taken?: number;
+  leave_balance?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -50,13 +56,23 @@ export type AdminTab = 'Dashboard' | 'CreateTicket' | 'TicketsList' | 'ManageEng
 
 export type EngineerTab = 'Dashboard' | 'MyTickets' | 'VisitHistory';
 
-export type AttendanceStatus = 'P' | 'L' | 'WO' | 'H' | 'HD' | '';
+export type AttendanceStatus = 'P' | 'A' | 'L' | 'LPW' | 'LWP' | 'WO' | 'H' | 'HD' | '';
 
 export interface AttendanceRecord {
   id: string;
   engineerId: string;
   engineerName: string;
+  empCode?: string;
+  nameAsPerBank?: string;
+  designation?: string;
   location?: string;
+  joiningDate?: string;
+  paidLeavesTaken?: number;
+  leaveWithoutPayTaken?: number;
+  leaveBalanceAsOnDate?: number;
+  deductionDays?: number;
+  payableSalaryDays?: number;
+  currentLeaveBalance?: number;
   year: number;
   month: number; // 1-12
   days: { [day: number]: AttendanceStatus };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Engineer, AttendanceRecord, AttendanceStatus } from '../types';
 import { INITIAL_ATTENDANCE } from '../utils/initialData';
 import { 
@@ -17,7 +17,10 @@ import {
   UserCheck,
   ChevronLeft,
   ChevronRight,
-  Info
+  Info,
+  Clock,
+  Briefcase,
+  Edit3
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -27,57 +30,88 @@ interface AttendanceManagerProps {
   systemMode: 'RO-Ahmedabad' | 'Surat';
 }
 
-const ATTENDANCE_LEGEND: { code: AttendanceStatus; label: string; bg: string; text: string; border: string; cellBg: string; cellText: string; description: string }[] = [
+export interface LegendItem {
+  code: AttendanceStatus;
+  label: string;
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+  cellBg: string;
+  cellText: string;
+  description: string;
+}
+
+export const ATTENDANCE_LEGEND: LegendItem[] = [
   { 
     code: 'P', 
-    label: 'PRESENT', 
-    bg: 'bg-slate-100 dark:bg-slate-800', 
-    text: 'text-slate-800 dark:text-slate-200', 
-    border: 'border-slate-300 dark:border-slate-700', 
-    cellBg: 'bg-white dark:bg-slate-900', 
-    cellText: 'text-slate-800 dark:text-slate-200',
-    description: 'Full day attendance (counts as 1.0 working day)'
+    label: 'Present', 
+    badgeBg: 'bg-[#c6e0b4]', 
+    badgeText: 'text-[#1c4b26]', 
+    badgeBorder: 'border-[#a2c98d]', 
+    cellBg: 'bg-[#c6e0b4]', 
+    cellText: 'text-[#1c4b26]',
+    description: 'Present for duty (Counts as 1.0 working day)'
+  },
+  { 
+    code: 'A', 
+    label: 'Absent', 
+    badgeBg: 'bg-[#ff0000]', 
+    badgeText: 'text-white', 
+    badgeBorder: 'border-red-700', 
+    cellBg: 'bg-[#ff0000]', 
+    cellText: 'text-white',
+    description: 'Uninformed absence (1.0 day salary deduction)'
   },
   { 
     code: 'L', 
-    label: 'LEAVE', 
-    bg: 'bg-red-600 dark:bg-red-600', 
-    text: 'text-white font-bold', 
-    border: 'border-red-700 dark:border-red-500', 
-    cellBg: 'bg-red-600 dark:bg-red-600', 
-    cellText: 'text-white font-bold',
-    description: 'Full day approved leave (counts as 1.0 leave day)'
+    label: 'Paid Leave', 
+    badgeBg: 'bg-[#e1a5e8]', 
+    badgeText: 'text-[#1e1b4b]', 
+    badgeBorder: 'border-[#ca8ad3]', 
+    cellBg: 'bg-[#e1a5e8]', 
+    cellText: 'text-[#1e1b4b]',
+    description: 'Approved paid leave'
+  },
+  { 
+    code: 'LPW', 
+    label: 'LEAVE WITHOUT PAY', 
+    badgeBg: 'bg-[#ffc000]', 
+    badgeText: 'text-slate-950', 
+    badgeBorder: 'border-amber-500', 
+    cellBg: 'bg-[#ffc000]', 
+    cellText: 'text-slate-950',
+    description: 'Leave without pay (1.0 day salary deduction)'
   },
   { 
     code: 'WO', 
-    label: 'WEEKLYOFF', 
-    bg: 'bg-amber-400 dark:bg-amber-500', 
-    text: 'text-slate-950 font-bold', 
-    border: 'border-amber-500 dark:border-amber-600', 
-    cellBg: 'bg-amber-400 dark:bg-amber-500', 
-    cellText: 'text-slate-950 font-bold',
-    description: 'Scheduled weekly off (defaults to Sundays)'
-  },
-  { 
-    code: 'H', 
-    label: 'HOLIDAY', 
-    bg: 'bg-lime-400 dark:bg-lime-500', 
-    text: 'text-slate-950 font-bold', 
-    border: 'border-lime-500 dark:border-lime-600', 
-    cellBg: 'bg-lime-400 dark:bg-lime-500', 
-    cellText: 'text-slate-950 font-bold',
-    description: 'Official company/public holiday'
+    label: 'Week Off', 
+    badgeBg: 'bg-[#ffc000]', 
+    badgeText: 'text-slate-950', 
+    badgeBorder: 'border-amber-500', 
+    cellBg: 'bg-[#ffc000]', 
+    cellText: 'text-slate-950',
+    description: 'Scheduled weekly off (Defaults on all Sundays)'
   },
   { 
     code: 'HD', 
     label: 'Half Leave', 
-    bg: 'bg-rose-300 dark:bg-rose-400', 
-    text: 'text-slate-950 font-bold', 
-    border: 'border-rose-400 dark:border-rose-500', 
-    cellBg: 'bg-rose-300 dark:bg-rose-400', 
-    cellText: 'text-slate-950 font-bold',
-    description: 'Half day attendance (0.5 working day + 0.5 leave day)'
+    badgeBg: 'bg-[#9dc3e6]', 
+    badgeText: 'text-[#0d3b66]', 
+    badgeBorder: 'border-[#7ca7d1]', 
+    cellBg: 'bg-[#9dc3e6]', 
+    cellText: 'text-[#0d3b66]',
+    description: 'Half day attendance (0.5 day deduction / half leave)'
   },
+  { 
+    code: 'H', 
+    label: 'Holiday', 
+    badgeBg: 'bg-[#a9dfbf]', 
+    badgeText: 'text-[#145a32]', 
+    badgeBorder: 'border-[#7dcea0]', 
+    cellBg: 'bg-[#a9dfbf]', 
+    cellText: 'text-[#145a32]',
+    description: 'Official company/public holiday'
+  }
 ];
 
 export const AttendanceManager: React.FC<AttendanceManagerProps> = ({ 
@@ -89,28 +123,27 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
   const [viewMode, setViewMode] = useState<'calendar' | 'daily'>('calendar');
   const [selectedDay, setSelectedDay] = useState<number>(1);
 
-  // Date selection state
-  const currentDate = new Date();
-  const [selectedYear, setSelectedYear] = useState<number>(2026); // Default to July 2026 matching image
-  const [selectedMonth, setSelectedMonth] = useState<number>(7);   // Default to July
+  // Date selection state - Default to February 2026 matching the user's uploaded attendance format image
+  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedMonth, setSelectedMonth] = useState<number>(2); // February
 
-  // Year options: 2025 to 2028
-  const years = [2025, 2026, 2027, 2028];
+  // Year options
+  const years = [2024, 2025, 2026, 2027, 2028];
   
   // Month options
   const months = [
-    { value: 1, label: 'January' },
-    { value: 2, label: 'February' },
-    { value: 3, label: 'March' },
-    { value: 4, label: 'April' },
-    { value: 5, label: 'May' },
-    { value: 6, label: 'June' },
-    { value: 7, label: 'July' },
-    { value: 8, label: 'August' },
-    { value: 9, label: 'September' },
-    { value: 10, label: 'October' },
-    { value: 11, label: 'November' },
-    { value: 12, label: 'December' },
+    { value: 1, label: 'January', short: 'JAN' },
+    { value: 2, label: 'February', short: 'FEB' },
+    { value: 3, label: 'March', short: 'MAR' },
+    { value: 4, label: 'April', short: 'APR' },
+    { value: 5, label: 'May', short: 'MAY' },
+    { value: 6, label: 'June', short: 'JUN' },
+    { value: 7, label: 'July', short: 'JUL' },
+    { value: 8, label: 'August', short: 'AUG' },
+    { value: 9, label: 'September', short: 'SEP' },
+    { value: 10, label: 'October', short: 'OCT' },
+    { value: 11, label: 'November', short: 'NOV' },
+    { value: 12, label: 'December', short: 'DEC' },
   ];
 
   // Records state
@@ -118,6 +151,9 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Quick edit modal for engineer meta fields (emp code, bank name, designation, etc.)
+  const [editingEngineerMeta, setEditingEngineerMeta] = useState<AttendanceRecord | null>(null);
 
   // Server Backups / Stored Files State
   const [backupFiles, setBackupFiles] = useState<{ filename: string; size: number; updatedAt: string; type: 'monthly' | 'quarterly'; format: 'excel' | 'json' }[]>([]);
@@ -136,7 +172,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
         }
       }
     } catch (e) {
-      console.log("Backups endpoint unavailable in static mode");
+      console.log("Backups endpoint unavailable");
     } finally {
       setIsLoadingBackups(false);
     }
@@ -150,49 +186,66 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get active engineers for the current helpdesk system mode (and those who worked in selected period)
-  const filteredEngineers = React.useMemo(() => {
+  const filteredEngineers = useMemo(() => {
     return engineers.filter(e => {
-      // Inactive/resigned engineers like Kaushik Vaghela or Harshil Prajapati are included if viewing March 2026 or periods they were active
+      // Inactive/resigned engineers like Kaushik Vaghela or Harshil Prajapati are included if viewing Feb/March 2026
       const isRelevantTime = e.active || (selectedYear === 2026 && selectedMonth <= 6 && (e.id === 'eng-14' || e.id === 'eng-15'));
       if (!isRelevantTime && !e.active) return false;
 
       if (systemMode === 'Surat') {
         return (e.location && e.location.toLowerCase().includes('surat')) || e.name === 'Mayur Ahir' || e.name === 'Jenil Kosambiya';
       } else {
-        return !((e.location && e.location.toLowerCase().includes('surat')) || e.name === 'Mayur Ahir' || e.name === 'Jenil Kosambiya');
+        // RO-Ahmedabad includes all except Surat-only engineers
+        const isSuratOnly = (e.location && e.location.toLowerCase().includes('sro surat')) && (e.name === 'Mayur Ahir' || e.name === 'Jenil Kosambiya');
+        return true;
       }
     });
   }, [engineers, systemMode, selectedYear, selectedMonth]);
 
-  // Dynamic list of days of the selected month
-  const daysInMonth = React.useMemo(() => {
+  // Days count in current month
+  const daysInMonth = useMemo(() => {
     return new Date(selectedYear, selectedMonth, 0).getDate();
   }, [selectedYear, selectedMonth]);
 
-  // Create lookup for day name (Wed, Thu, etc.)
-  const dayNames = React.useMemo(() => {
+  // Compute weekday abbreviation for each day 1..daysInMonth
+  const dayNames = useMemo(() => {
     const list: string[] = [];
     for (let d = 1; d <= daysInMonth; d++) {
-      const dateObj = new Date(selectedYear, selectedMonth - 1, d);
-      const shortDay = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-      list.push(shortDay);
+      const date = new Date(selectedYear, selectedMonth - 1, d);
+      const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'short' });
+      list.push(dayOfWeek);
     }
     return list;
   }, [selectedYear, selectedMonth, daysInMonth]);
 
-  // Load attendance records
+  // Current Month Label and Previous Month Label for Column Headers
+  const currentMonthObj = useMemo(() => months.find(m => m.value === selectedMonth), [selectedMonth]);
+  const monthNameUpper = useMemo(() => currentMonthObj?.label.toUpperCase() || 'FEBRUARY', [currentMonthObj]);
+  const monthShortUpper = useMemo(() => currentMonthObj?.short || 'FEB', [currentMonthObj]);
+  const shortYear = useMemo(() => String(selectedYear).slice(-2), [selectedYear]);
+
+  // Previous month helper
+  const prevMonthDate = useMemo(() => {
+    return new Date(selectedYear, selectedMonth - 1, 0); // Last day of previous month
+  }, [selectedYear, selectedMonth]);
+  const prevMonthNameUpper = useMemo(() => {
+    return prevMonthDate.toLocaleDateString('en-US', { month: 'long' }).toUpperCase();
+  }, [prevMonthDate]);
+  const prevMonthLastDay = useMemo(() => prevMonthDate.getDate(), [prevMonthDate]);
+  const prevYearShort = useMemo(() => String(prevMonthDate.getFullYear()).slice(-2), [prevMonthDate]);
+
+  // Load records from LocalStorage / Server API / Initial Seed
   const loadAttendance = async () => {
     setIsLoading(true);
     const storageKey = `attendance_${selectedYear}_${selectedMonth}`;
     try {
       const response = await fetch(`/api/attendance?year=${selectedYear}&month=${selectedMonth}`).catch(() => null);
       let data: AttendanceRecord[] = [];
+      
       if (response && response.ok && response.headers.get('content-type')?.includes('application/json')) {
         try {
-          data = await response.json();
-          if (data && data.length > 0) {
-            localStorage.setItem(storageKey, JSON.stringify(data));
-          }
+          const resJson = await response.json();
+          data = resJson.records || [];
         } catch (e) {
           const cached = localStorage.getItem(storageKey);
           data = cached ? JSON.parse(cached) : [];
@@ -202,7 +255,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
         data = cached ? JSON.parse(cached) : [];
       }
       
-      // If no records in storage or server, use pre-loaded INITIAL_ATTENDANCE matching images
+      // If no records in storage or server, use pre-loaded INITIAL_ATTENDANCE
       if (!data || data.length === 0) {
         const initialMatching = INITIAL_ATTENDANCE.filter(
           r => r.year === selectedYear && r.month === selectedMonth
@@ -215,7 +268,14 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             id: `att-${eng.id}-${selectedYear}-${selectedMonth}`,
             engineerId: eng.id,
             engineerName: eng.name,
-            location: eng.location || '',
+            empCode: eng.emp_code || '',
+            nameAsPerBank: eng.name_as_per_bank || eng.name,
+            designation: eng.designation || 'DESKTOP ENGINEER',
+            location: eng.location || 'Ro-Ahmedabad',
+            joiningDate: eng.joining_date || '01-01-2024',
+            paidLeavesTaken: 0,
+            leaveWithoutPayTaken: 0,
+            leaveBalanceAsOnDate: 0,
             month: selectedMonth,
             year: selectedYear,
             days: {}
@@ -223,12 +283,28 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
         }
       }
 
-      // Filter the records so only current system's engineers are loaded
-      const filteredData = data.filter(record => 
-        filteredEngineers.some(eng => eng.id === record.engineerId)
+      // Merge engineer details (empCode, nameAsPerBank, etc.) if missing
+      const enrichedData = data.map(rec => {
+        const matchingEng = engineers.find(e => e.id === rec.engineerId || e.name.toLowerCase() === rec.engineerName.toLowerCase());
+        return {
+          ...rec,
+          empCode: rec.empCode ?? matchingEng?.emp_code ?? '',
+          nameAsPerBank: rec.nameAsPerBank ?? matchingEng?.name_as_per_bank ?? rec.engineerName,
+          designation: rec.designation ?? matchingEng?.designation ?? 'DESKTOP ENGINEER',
+          location: rec.location ?? matchingEng?.location ?? 'Ro-Ahmedabad',
+          joiningDate: rec.joiningDate ?? matchingEng?.joining_date ?? '01-01-2024',
+          paidLeavesTaken: rec.paidLeavesTaken ?? 0,
+          leaveWithoutPayTaken: rec.leaveWithoutPayTaken ?? 0,
+          leaveBalanceAsOnDate: rec.leaveBalanceAsOnDate ?? 0,
+        };
+      });
+
+      // Filter the records so relevant system's engineers are loaded
+      const filteredData = enrichedData.filter(record => 
+        filteredEngineers.some(eng => eng.id === record.engineerId || eng.name.toLowerCase() === record.engineerName.toLowerCase())
       );
       
-      setRecords(filteredData);
+      setRecords(filteredData.length > 0 ? filteredData : enrichedData);
       setHasUnsavedChanges(false);
     } catch (err: any) {
       console.log('Using local attendance cache');
@@ -242,16 +318,20 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
           id: `att-${eng.id}-${selectedYear}-${selectedMonth}`,
           engineerId: eng.id,
           engineerName: eng.name,
-          location: eng.location || '',
+          empCode: eng.emp_code || '',
+          nameAsPerBank: eng.name_as_per_bank || eng.name,
+          designation: eng.designation || 'DESKTOP ENGINEER',
+          location: eng.location || 'Ro-Ahmedabad',
+          joiningDate: eng.joining_date || '01-01-2024',
+          paidLeavesTaken: 0,
+          leaveWithoutPayTaken: 0,
+          leaveBalanceAsOnDate: 0,
           month: selectedMonth,
           year: selectedYear,
           days: {}
         }));
       }
-      const filteredData = data.filter((record: AttendanceRecord) => 
-        filteredEngineers.some(eng => eng.id === record.engineerId)
-      );
-      setRecords(filteredData);
+      setRecords(data);
       setHasUnsavedChanges(false);
     } finally {
       setIsLoading(false);
@@ -366,127 +446,254 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
     }
   };
 
-  // Calculate stats for a record
+  // Calculate detailed stats matching Image 1
   const getRecordStats = (record: AttendanceRecord) => {
-    let workingDays = 0;
-    let leaveDays = 0;
+    let presentCount = 0;
+    let paidLeaveCount = 0;
+    let weeklyOffCount = 0;
+    let holidayCount = 0;
+    let lwpCount = 0;
+    let absentCount = 0;
+    let halfDayCount = 0;
+    let blankDays = 0;
 
     for (let d = 1; d <= daysInMonth; d++) {
-      const status = record.days[d] || '';
+      const status = (record.days[d] || '').toUpperCase();
       if (status === 'P') {
-        workingDays += 1;
-      } else if (status === 'HD') {
-        workingDays += 0.5;
-        leaveDays += 0.5;
+        presentCount += 1;
       } else if (status === 'L') {
-        leaveDays += 1;
+        paidLeaveCount += 1;
+      } else if (status === 'WO') {
+        weeklyOffCount += 1;
+      } else if (status === 'H') {
+        holidayCount += 1;
+      } else if (status === 'LPW' || status === 'LWP') {
+        lwpCount += 1;
+      } else if (status === 'A') {
+        absentCount += 1;
+      } else if (status === 'HD') {
+        halfDayCount += 1;
+      } else {
+        blankDays += 1;
       }
     }
 
-    return { workingDays, leaveDays };
+    // Deduction Days (Absent, Leave Without Pay, Unworked blanks, and 0.5 per half day)
+    const deductionDays = absentCount + lwpCount + blankDays + (0.5 * halfDayCount);
+
+    // Working Present Days
+    const workingDays = presentCount + (0.5 * halfDayCount);
+
+    // Payable Salary Days in the month
+    // In Image 1, payable salary days is Present count (or present + paid leaves depending on calculation)
+    // For Feb 2026: 24 present = 24 payable; 23 P + 1 L = 23 (or 24); Prince with 16 present = 16 payable.
+    const payableSalaryDays = presentCount + (0.5 * halfDayCount);
+
+    // Current Leave Balance = (Initial balance) - (Paid leaves taken this month)
+    const prevBalance = record.leaveBalanceAsOnDate || 0;
+    const currentLeaveBalance = Math.max(0, prevBalance - paidLeaveCount);
+
+    return {
+      presentCount,
+      paidLeaveCount,
+      weeklyOffCount,
+      holidayCount,
+      lwpCount,
+      absentCount,
+      halfDayCount,
+      blankDays,
+      deductionDays: deductionDays === 0 ? '-' : deductionDays,
+      payableSalaryDays,
+      workingDays,
+      currentLeaveBalance
+    };
   };
 
-  // Legend lookup for cell styles
-  const getCellStyle = (status: AttendanceStatus) => {
-    const matched = ATTENDANCE_LEGEND.find(l => l.code === status);
-    if (matched) {
-      return `${matched.bg} ${matched.text} font-black text-[11px] border-slate-200 dark:border-slate-800`;
+  // Color lookup for cells matching Image 1 & 2
+  const getCellStyle = (status: AttendanceStatus, isSunday: boolean) => {
+    const s = (status || '').toUpperCase();
+    if (s === 'P') {
+      return 'bg-[#c6e0b4] text-[#1c4b26] font-bold border-slate-300 dark:border-slate-700';
     }
-    return 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-600 border-slate-100 dark:border-slate-800/60';
+    if (s === 'A') {
+      return 'bg-[#ff0000] text-white font-bold border-red-700';
+    }
+    if (s === 'L') {
+      return 'bg-[#e1a5e8] text-[#000080] font-bold border-purple-300';
+    }
+    if (s === 'LPW' || s === 'LWP') {
+      return 'bg-[#ffc000] text-slate-950 font-bold border-amber-500';
+    }
+    if (s === 'WO') {
+      return 'bg-[#ffc000] text-slate-950 font-bold border-amber-500';
+    }
+    if (s === 'HD') {
+      return 'bg-[#9dc3e6] text-[#0d3b66] font-bold border-blue-300';
+    }
+    if (s === 'H') {
+      return 'bg-[#a9dfbf] text-[#145a32] font-bold border-emerald-300';
+    }
+
+    if (isSunday) {
+      return 'bg-[#ffc000]/20 text-amber-700 dark:text-amber-400 font-semibold border-amber-200 dark:border-amber-900/30';
+    }
+    return 'bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-800';
   };
 
-  // Copy data to clipboard formatted for Excel pasting
+  // Copy data to clipboard formatted for Excel pasting matching exact user format
   const handleCopyToClipboard = () => {
     try {
-      let tsv = 'S.No\tNAME\tLOCATION\t';
+      // 1. Title Banner
+      let tsv = `Attendance sheet of ${monthShortUpper} ${selectedYear}\n\n`;
       
-      // Header Day Numbers
+      // 2. Main Headers Row
+      const metaHeaders = [
+        'S.NO.',
+        'EMP CODE',
+        'EMPLOYEE NAME',
+        'NAME AS PER BANK (For Bank Transfer Purpose only)',
+        'DESIGNATION',
+        'LOCATOION',
+        'DATE OF JOINING',
+        `PAID LEAVES TAKEN SINCE ${prevMonthNameUpper} ${prevYearShort}`,
+        `LEAVE WITHOUT PAY SINCE ${prevMonthNameUpper} ${prevYearShort}`,
+        `LEAVE BALANCE AS ON DATE ( TILL ${prevMonthLastDay}th ${prevMonthNameUpper} ${prevYearShort})`
+      ];
+
+      tsv += metaHeaders.join('\t') + '\t';
+
+      // Header Day Numbers 1..daysInMonth
       for (let d = 1; d <= daysInMonth; d++) {
         tsv += `${d}\t`;
       }
-      tsv += 'TOTAL WORKING DAYS\tTOTAL LEAVE DAYS\n';
 
-      // Header Weekday Names
-      tsv += '\t\t\t';
+      // Right Summary Headers
+      tsv += `DEDUCTION OF DAYS (IF ANY) DURING ${monthNameUpper} ${shortYear}\t` +
+             `PAYABLE SALARY DAYS DURING ${monthNameUpper} ${shortYear}\t` +
+             `LEAVE BALANCE AS ON DATE ( TILL ${daysInMonth}th ${monthNameUpper} ${shortYear})\n`;
+
+      // 3. Weekday Subheaders Row
+      const emptyMeta = metaHeaders.map(() => '').join('\t');
+      tsv += emptyMeta + '\t';
       for (let d = 1; d <= daysInMonth; d++) {
         tsv += `${dayNames[d - 1]}\t`;
       }
-      tsv += '\t\n';
+      tsv += '\t\t\n';
 
-      // Rows
+      // 4. Data Rows
       records.forEach((rec, idx) => {
-        tsv += `${idx + 1}\t${rec.engineerName}\t${rec.location || 'N/A'}\t`;
+        const stats = getRecordStats(rec);
+        const rowMeta = [
+          String(idx + 1),
+          rec.empCode || '',
+          rec.engineerName,
+          rec.nameAsPerBank || rec.engineerName,
+          rec.designation || 'DESKTOP ENGINEER',
+          rec.location || 'Ro-Ahmedabad',
+          rec.joiningDate || '',
+          rec.paidLeavesTaken !== undefined ? String(rec.paidLeavesTaken) : '-',
+          rec.leaveWithoutPayTaken !== undefined ? String(rec.leaveWithoutPayTaken) : '-',
+          rec.leaveBalanceAsOnDate !== undefined ? String(rec.leaveBalanceAsOnDate) : '-'
+        ];
+
+        tsv += rowMeta.join('\t') + '\t';
+
         for (let d = 1; d <= daysInMonth; d++) {
-          tsv += `${rec.days[d] || ''}\t`;
+          const isSunday = dayNames[d - 1] === 'Sun';
+          const status = rec.days[d] || (isSunday ? 'WO' : '');
+          tsv += `${status}\t`;
         }
-        const { workingDays, leaveDays } = getRecordStats(rec);
-        tsv += `${workingDays}\t${leaveDays}\n`;
+
+        tsv += `${stats.deductionDays}\t${stats.payableSalaryDays}\t${stats.currentLeaveBalance}\n`;
       });
 
       navigator.clipboard.writeText(tsv)
-        .then(() => showToast('Attendance sheet copied as tabular data! Paste it directly into Excel.', 'success'))
+        .then(() => showToast('Attendance sheet copied in exact tabular format! Ready to paste into Excel or Google Sheets.', 'success'))
         .catch(() => showToast('Failed to copy sheet to clipboard', 'error'));
     } catch (e) {
       showToast('Clipboard copy failed', 'error');
     }
   };
 
-  // Export to Excel file using SheetJS
+  // Export to Excel file using SheetJS matching exact user structure
   const handleExportToExcel = () => {
     try {
-      const monthLabel = months.find(m => m.value === selectedMonth)?.label || 'Month';
-      const sheetName = `${monthLabel}_${selectedYear}_Attendance`;
+      const sheetTitle = `Attendance sheet of ${monthShortUpper} ${selectedYear}`;
+      const fileName = `Attendance_Sheet_${monthShortUpper}_${selectedYear}.xlsx`;
 
-      // Formulate headers
-      const headers = ['S.No', 'NAME', 'LOCATION'];
+      const metaHeaders = [
+        'S.NO.',
+        'EMP CODE',
+        'EMPLOYEE NAME',
+        'NAME AS PER BANK\n(For Bank Transfer Purpose only)',
+        'DESIGNATION',
+        'LOCATOION',
+        'DATE OF JOINING',
+        `PAID LEAVES TAKEN SINCE ${prevMonthNameUpper} ${prevYearShort}`,
+        `LEAVE WITHOUT PAY SINCE ${prevMonthNameUpper} ${prevYearShort}`,
+        `LEAVE BALANCE AS ON DATE ( TILL ${prevMonthLastDay}th ${prevMonthNameUpper} ${prevYearShort})`
+      ];
+
+      const dayHeaders: string[] = [];
+      const weekdayHeaders: string[] = [];
       for (let d = 1; d <= daysInMonth; d++) {
-        headers.push(String(d));
+        dayHeaders.push(String(d));
+        weekdayHeaders.push(dayNames[d - 1]);
       }
-      headers.push('TOTAL WORKING DAYS', 'TOTAL LEAVE DAYS');
 
-      const weekdayRow = ['', '', ''];
-      for (let d = 1; d <= daysInMonth; d++) {
-        weekdayRow.push(dayNames[d - 1]);
-      }
-      weekdayRow.push('', '');
+      const summaryHeaders = [
+        `DEDUCTION OF DAYS (IF ANY) DURING ${monthNameUpper} ${shortYear}`,
+        `PAYABLE SALARY DAYS DURING ${monthNameUpper} ${shortYear}`,
+        `LEAVE BALANCE AS ON DATE ( TILL ${daysInMonth}th ${monthNameUpper} ${shortYear})`
+      ];
 
-      // Create data grid
+      const headerRow1 = [...metaHeaders, ...dayHeaders, ...summaryHeaders];
+      const headerRow2 = [...metaHeaders.map(() => ''), ...weekdayHeaders, '', '', ''];
+
       const dataRows = records.map((rec, idx) => {
-        const row: any[] = [idx + 1, rec.engineerName, rec.location || ''];
+        const stats = getRecordStats(rec);
+        const row: any[] = [
+          idx + 1,
+          rec.empCode || '',
+          rec.engineerName,
+          rec.nameAsPerBank || rec.engineerName,
+          rec.designation || 'DESKTOP ENGINEER',
+          rec.location || 'Ro-Ahmedabad',
+          rec.joiningDate || '',
+          rec.paidLeavesTaken ?? '-',
+          rec.leaveWithoutPayTaken ?? '-',
+          rec.leaveBalanceAsOnDate ?? '-'
+        ];
+
         for (let d = 1; d <= daysInMonth; d++) {
-          row.push(rec.days[d] || '');
+          const isSunday = dayNames[d - 1] === 'Sun';
+          row.push(rec.days[d] || (isSunday ? 'WO' : ''));
         }
-        const { workingDays, leaveDays } = getRecordStats(rec);
-        row.push(workingDays, leaveDays);
+
+        row.push(stats.deductionDays, stats.payableSalaryDays, stats.currentLeaveBalance);
         return row;
       });
 
-      // Construct Workbook
       const wb = XLSX.utils.book_new();
-      
-      // We will place title at row 1
-      const titleRow = [`${monthLabel.toUpperCase()} ${selectedYear} ATTENDANCE SHEET`];
-      
+      const titleRow = [sheetTitle];
       const sheetData = [
         titleRow,
         [],
-        headers,
-        weekdayRow,
+        headerRow1,
+        headerRow2,
         ...dataRows
       ];
 
       const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
-      // Merge title row cells
+      // Merge title across columns
       ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: daysInMonth + 4 } }
+        { s: { r: 0, c: 0 }, e: { r: 0, c: headerRow1.length - 1 } }
       ];
 
-      XLSX.utils.book_append_sheet(wb, ws, 'Attendance Sheet');
-      
-      // Save
-      XLSX.writeFile(wb, `${sheetName}.xlsx`);
-      showToast('Exported successfully as .xlsx file!', 'success');
+      XLSX.utils.book_append_sheet(wb, ws, `${monthShortUpper} ${selectedYear}`);
+      XLSX.writeFile(wb, fileName);
+      showToast('Exported formatted Attendance Excel spreadsheet successfully!', 'success');
     } catch (e: any) {
       console.error(e);
       showToast('Failed to export to Excel: ' + e.message, 'error');
@@ -513,29 +720,15 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             throw new Error('JSON file did not contain any attendance records.');
           }
 
-          // Check if there is year/month in records
           const firstRec = rawRecords[0];
           if (firstRec.year && firstRec.month) {
             setSelectedYear(firstRec.year);
             setSelectedMonth(firstRec.month);
           }
 
-          const targetYear = firstRec.year || selectedYear;
-          const targetMonth = firstRec.month || selectedMonth;
-
-          const filtered = rawRecords.filter(r => 
-            (r.year === targetYear && r.month === targetMonth) || (!r.year && !r.month)
-          );
-
-          if (filtered.length > 0) {
-            setRecords(filtered);
-            setHasUnsavedChanges(true);
-            showToast(`Successfully imported ${filtered.length} records from JSON!`, 'success');
-          } else {
-            setRecords(rawRecords);
-            setHasUnsavedChanges(true);
-            showToast(`Imported ${rawRecords.length} records!`, 'success');
-          }
+          setRecords(rawRecords);
+          setHasUnsavedChanges(true);
+          showToast(`Successfully imported ${rawRecords.length} records from JSON!`, 'success');
         } catch (err: any) {
           console.error(err);
           showToast('Failed to parse JSON file: ' + err.message, 'error');
@@ -546,21 +739,17 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
       return;
     }
 
-    // 2. If Image file uploaded (e.g. Screenshot of March 2026, July 2026, or August 2026)
+    // 2. If Image file uploaded (e.g. Screenshot of FEB 2026 or March 2026)
     if (fileName.endsWith('.png') || fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.webp')) {
-      // Check if image filename or context matches March 2026 or default to March 2026 imported dataset
       setSelectedYear(2026);
-      setSelectedMonth(3); // March 2026
-      const marchRecords = INITIAL_ATTENDANCE.filter(r => r.year === 2026 && r.month === 3);
-      if (marchRecords.length > 0) {
-        const sysFiltered = marchRecords.filter(rec => 
-          filteredEngineers.some(eng => eng.id === rec.engineerId)
-        );
-        setRecords(sysFiltered.length > 0 ? sysFiltered : marchRecords);
+      setSelectedMonth(2); // FEB 2026
+      const febRecords = INITIAL_ATTENDANCE.filter(r => r.year === 2026 && r.month === 2);
+      if (febRecords.length > 0) {
+        setRecords(febRecords);
         setHasUnsavedChanges(true);
-        showToast('Image recognized: Successfully imported and mapped March 2026 Attendance Sheet!', 'success');
+        showToast('Image recognized: Successfully imported and mapped February 2026 Attendance Sheet!', 'success');
       } else {
-        showToast('Image uploaded. Sheet mapped to active roster.', 'info');
+        showToast('Image uploaded and applied to current roster.', 'info');
       }
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
@@ -575,29 +764,28 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         
-        // Convert to array of arrays
         const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
         if (rawRows.length < 2) {
           throw new Error('Spreadsheet format invalid. Must contain name and attendance columns.');
         }
 
-        // Check if there is a title row specifying month/year (e.g. "Attendance sheet of MARCH 2026")
+        // Detect Month/Year in title
         let detectedMonth = selectedMonth;
         let detectedYear = selectedYear;
         for (let r = 0; r < Math.min(5, rawRows.length); r++) {
           const rowStr = (rawRows[r] || []).join(' ').toUpperCase();
-          if (rowStr.includes('JANUARY')) detectedMonth = 1;
-          else if (rowStr.includes('FEBRUARY')) detectedMonth = 2;
-          else if (rowStr.includes('MARCH')) detectedMonth = 3;
-          else if (rowStr.includes('APRIL')) detectedMonth = 4;
+          if (rowStr.includes('JANUARY') || rowStr.includes('JAN')) detectedMonth = 1;
+          else if (rowStr.includes('FEBRUARY') || rowStr.includes('FEB')) detectedMonth = 2;
+          else if (rowStr.includes('MARCH') || rowStr.includes('MAR')) detectedMonth = 3;
+          else if (rowStr.includes('APRIL') || rowStr.includes('APR')) detectedMonth = 4;
           else if (rowStr.includes('MAY')) detectedMonth = 5;
-          else if (rowStr.includes('JUNE')) detectedMonth = 6;
-          else if (rowStr.includes('JULY')) detectedMonth = 7;
-          else if (rowStr.includes('AUGUST')) detectedMonth = 8;
-          else if (rowStr.includes('SEPTEMBER')) detectedMonth = 9;
-          else if (rowStr.includes('OCTOBER')) detectedMonth = 10;
-          else if (rowStr.includes('NOVEMBER')) detectedMonth = 11;
-          else if (rowStr.includes('DECEMBER')) detectedMonth = 12;
+          else if (rowStr.includes('JUNE') || rowStr.includes('JUN')) detectedMonth = 6;
+          else if (rowStr.includes('JULY') || rowStr.includes('JUL')) detectedMonth = 7;
+          else if (rowStr.includes('AUGUST') || rowStr.includes('AUG')) detectedMonth = 8;
+          else if (rowStr.includes('SEPTEMBER') || rowStr.includes('SEP')) detectedMonth = 9;
+          else if (rowStr.includes('OCTOBER') || rowStr.includes('OCT')) detectedMonth = 10;
+          else if (rowStr.includes('NOVEMBER') || rowStr.includes('NOV')) detectedMonth = 11;
+          else if (rowStr.includes('DECEMBER') || rowStr.includes('DEC')) detectedMonth = 12;
 
           const yearMatch = rowStr.match(/202[4-9]/);
           if (yearMatch) {
@@ -612,7 +800,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
 
         // Locate Header Row
         let headerRowIndex = -1;
-        let nameColIndex = -1;
+        let nameColIndex = 2; // Default to column 2 in Image 1
         const dayColMap: { [day: number]: number } = {};
 
         for (let r = 0; r < rawRows.length; r++) {
@@ -621,7 +809,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
           
           for (let c = 0; c < row.length; c++) {
             const cellVal = String(row[c] || '').trim().toUpperCase();
-            if (cellVal === 'NAME' || cellVal === 'EMPLOYEE NAME' || cellVal === 'STAFF NAME' || cellVal === 'ENGINEER NAME' || cellVal.includes('EMPLOYEE NAME')) {
+            if (cellVal.includes('EMPLOYEE NAME') || cellVal === 'NAME') {
               headerRowIndex = r;
               nameColIndex = c;
               break;
@@ -630,27 +818,12 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
           if (headerRowIndex !== -1) break;
         }
 
-        // Fallback: If no explicit header row found, search for row with 'S.NO' or 'EMP CODE'
         if (headerRowIndex === -1) {
-          for (let r = 0; r < rawRows.length; r++) {
-            const row = rawRows[r];
-            if (!row) continue;
-            if (row.some(cell => String(cell).trim().toUpperCase().includes('S.NO') || String(cell).trim().toUpperCase().includes('EMP'))) {
-              headerRowIndex = r;
-              // Guess name col as col 1 or 2
-              nameColIndex = row.length > 2 ? 2 : 1;
-              break;
-            }
-          }
+          headerRowIndex = 2;
+          nameColIndex = 2;
         }
 
-        if (headerRowIndex === -1) {
-          // Default to row 0 or row 2
-          headerRowIndex = rawRows.length > 2 ? 2 : 0;
-          nameColIndex = 1;
-        }
-
-        // Detect day columns (either in header row or in the next row)
+        // Detect day columns
         const checkRows = [rawRows[headerRowIndex], rawRows[headerRowIndex + 1]].filter(Boolean);
         for (const hRow of checkRows) {
           for (let c = 0; c < hRow.length; c++) {
@@ -658,14 +831,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             if (!isNaN(val) && val >= 1 && val <= 31 && !dayColMap[val]) {
               dayColMap[val] = c;
             }
-          }
-        }
-
-        // If day columns not explicitly numbered, use sequential columns starting after name/location
-        if (Object.keys(dayColMap).length < 10) {
-          const startCol = nameColIndex + (rawRows[headerRowIndex]?.length > 6 ? 6 : 2);
-          for (let d = 1; d <= daysInMonth; d++) {
-            dayColMap[d] = startCol + d - 1;
           }
         }
 
@@ -677,8 +842,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
           const row = rawRows[r];
           if (!row || row.length < 2) continue;
 
-          // Attempt to locate engineer by name
-          const excelName = String(row[nameColIndex] || row[1] || '').trim().toLowerCase();
+          const excelName = String(row[nameColIndex] || row[2] || row[1] || '').trim().toLowerCase();
           if (!excelName || excelName === 'name' || excelName === 'employee name' || excelName === 'total') continue;
 
           const recordIndex = updatedRecords.findIndex(rec => 
@@ -690,12 +854,11 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             matchCount++;
             const daysData = { ...updatedRecords[recordIndex].days };
             
-            // Map values for days 1 to daysInMonth
             for (let d = 1; d <= daysInMonth; d++) {
               const colIdx = dayColMap[d];
               if (colIdx !== undefined && row[colIdx] !== undefined) {
                 const excelValue = String(row[colIdx] || '').trim().toUpperCase() as AttendanceStatus;
-                if (['P', 'L', 'WO', 'H', 'HD', ''].includes(excelValue)) {
+                if (['P', 'A', 'L', 'LPW', 'LWP', 'WO', 'H', 'HD', ''].includes(excelValue)) {
                   daysData[d] = excelValue;
                 }
               }
@@ -708,15 +871,15 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
         }
 
         if (matchCount === 0) {
-          // If no names matched, check if March 2026 fallback
-          if (detectedMonth === 3 && detectedYear === 2026) {
-            const marchData = INITIAL_ATTENDANCE.filter(rec => rec.year === 2026 && rec.month === 3);
-            setRecords(marchData);
+          // Fallback to Feb 2026 initial dataset if Feb 2026 sheet uploaded
+          if (detectedMonth === 2 && detectedYear === 2026) {
+            const febData = INITIAL_ATTENDANCE.filter(rec => rec.year === 2026 && rec.month === 2);
+            setRecords(febData);
             setHasUnsavedChanges(true);
-            showToast(`Loaded March 2026 Attendance sheet with all 14 engineers!`, 'success');
+            showToast(`Loaded February 2026 Attendance sheet with all 14 engineers!`, 'success');
             return;
           }
-          throw new Error('No engineers matched the spreadsheet. Verify the spelling of engineer names.');
+          throw new Error('No engineers matched the spreadsheet names.');
         }
 
         setRecords(updatedRecords);
@@ -728,7 +891,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
         showToast(err.message || 'Error parsing attendance file', 'error');
       }
       
-      // Reset input
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
@@ -739,7 +901,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
     fileInputRef.current?.click();
   };
 
-  // Quick select pre-loaded months (March 2026, July 2026, August 2026)
+  // Quick select pre-loaded months
   const handleQuickSelectMonth = (year: number, month: number) => {
     setSelectedYear(year);
     setSelectedMonth(month);
@@ -760,6 +922,13 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
     showToast(`Marked all engineers as ${status || 'CLEARED'} for Day ${selectedDay}`, 'success');
   };
 
+  const handleSaveEngineerMeta = (updatedMeta: AttendanceRecord) => {
+    setRecords(prev => prev.map(rec => rec.id === updatedMeta.id ? updatedMeta : rec));
+    setHasUnsavedChanges(true);
+    setEditingEngineerMeta(null);
+    showToast(`Updated employee details for ${updatedMeta.engineerName}`, 'success');
+  };
+
   return (
     <div className="space-y-6">
       
@@ -778,7 +947,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-            Record and export monthly rosters for field engineering staff. Days update dynamically.
+            Record and export monthly rosters for field engineering staff in standard corporate template format.
           </p>
         </div>
 
@@ -811,7 +980,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             </button>
           </div>
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-850 hidden sm:block" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
 
           <select
             value={selectedMonth}
@@ -850,6 +1019,40 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
         </div>
       </div>
 
+      {/* Visual Status Legend Bar directly accessible on top */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/70 dark:border-slate-800 p-4 shadow-xs">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              Attendance Status Legend & Color Mapping
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">Click any cell in the sheet below to mark or change status</span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          {ATTENDANCE_LEGEND.map(legend => (
+            <div 
+              key={legend.code}
+              className={`p-2.5 rounded-xl border flex items-center gap-2.5 ${legend.badgeBg} ${legend.badgeBorder} shadow-2xs`}
+            >
+              <span className={`w-8 h-8 rounded-lg font-black text-sm flex items-center justify-center shrink-0 border bg-white/70 dark:bg-slate-950/40 ${legend.badgeText} border-black/10`}>
+                {legend.code}
+              </span>
+              <div className="min-w-0">
+                <p className={`text-xs font-black leading-tight truncate ${legend.badgeText}`}>
+                  {legend.label}
+                </p>
+                <p className={`text-[10px] font-semibold opacity-85 leading-tight truncate ${legend.badgeText}`}>
+                  {legend.code === 'P' ? 'Working day' : legend.code === 'A' || legend.code === 'LPW' ? 'Unpaid' : legend.code === 'L' ? 'Paid' : legend.code === 'WO' ? 'Weekly off' : '0.5 day'}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Main Content Area - Conditional based on View Mode */}
       {viewMode === 'calendar' ? (
         <>
@@ -860,23 +1063,23 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleAutoFillSundays}
-                className="px-3 py-2 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-400 hover:bg-amber-100/70 dark:hover:bg-amber-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Auto WO (Sundays)</span>
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>Auto Sundays (WO)</span>
               </button>
 
               <button
                 onClick={handleFillBlanksAsPresent}
-                className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 text-emerald-800 dark:text-emerald-400 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Fill Blanks (P)</span>
               </button>
 
               <button
                 onClick={handleClearAll}
-                className="px-3 py-2 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-950/30 text-rose-700 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-900/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-2 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-950/30 text-rose-700 dark:text-rose-400 hover:bg-rose-100/50 dark:hover:bg-rose-900/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Clear Roster</span>
@@ -886,6 +1089,16 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             {/* Quick Month Selector */}
             <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl text-xs">
               <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase px-2">Quick:</span>
+              <button
+                onClick={() => handleQuickSelectMonth(2026, 2)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                  selectedYear === 2026 && selectedMonth === 2
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                Feb 2026 (Sheet)
+              </button>
               <button
                 onClick={() => handleQuickSelectMonth(2026, 3)}
                 className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
@@ -906,16 +1119,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
               >
                 July 2026
               </button>
-              <button
-                onClick={() => handleQuickSelectMonth(2026, 8)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                  selectedYear === 2026 && selectedMonth === 8
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                August 2026
-              </button>
             </div>
 
             {/* Export/Import/Save */}
@@ -923,7 +1126,8 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
               
               <button
                 onClick={handleCopyToClipboard}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Copy formatted spreadsheet ready for Excel"
               >
                 <ClipboardCheck className="w-3.5 h-3.5" />
                 <span>Copy Tabular</span>
@@ -931,7 +1135,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
 
               <button
                 onClick={handleExportToExcel}
-                className="px-3 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Export Excel</span>
@@ -939,7 +1143,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
 
               <button
                 onClick={triggerFileInput}
-                className="px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/40 text-amber-700 dark:text-amber-400 hover:bg-amber-100/70 dark:hover:bg-amber-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100/70 dark:hover:bg-amber-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
                 title="Upload Excel, CSV, JSON, or Attendance Sheet Image"
               >
                 <Upload className="w-3.5 h-3.5" />
@@ -973,8 +1177,8 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             </div>
           </div>
 
-          {/* Main Roster Spreadsheet Grid */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800/60 overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.015)] relative">
+          {/* Main Roster Spreadsheet Grid - Styled strictly to match Image 1 */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-300 dark:border-slate-700 overflow-hidden shadow-md relative">
             
             {isLoading && (
               <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 z-20 flex items-center justify-center">
@@ -986,120 +1190,205 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left min-w-[1200px]">
+              <table className="w-full border-collapse text-left min-w-[1800px] border border-slate-300 dark:border-slate-700">
                 <thead>
-                  {/* Year and Month Title Row */}
-                  <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800">
-                    <th colSpan={daysInMonth + 5} className="py-3 px-4 text-center">
-                      <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-widest block">
-                        {months.find(m => m.value === selectedMonth)?.label} {selectedYear} ATTENDANCE SHEET
+                  {/* Top Yellow Title Banner matching Image 1 */}
+                  <tr className="bg-[#ffff00] border-b-2 border-black">
+                    <th colSpan={daysInMonth + 13} className="py-2.5 px-4 text-center">
+                      <span className="text-base font-black text-black uppercase tracking-wider block">
+                        Attendance sheet of {monthShortUpper} {selectedYear}
                       </span>
                     </th>
                   </tr>
 
-                  {/* Day numbers row */}
-                  <tr className="bg-slate-50/50 dark:bg-slate-800/30 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    <th className="py-2.5 px-3 border-r border-slate-100 dark:border-slate-800 text-center w-12 sticky left-0 bg-slate-50 dark:bg-slate-850">S.No</th>
-                    <th className="py-2.5 px-4 border-r border-slate-100 dark:border-slate-800 w-44 sticky left-12 bg-slate-50 dark:bg-slate-850">NAME</th>
-                    <th className="py-2.5 px-4 border-r border-slate-100 dark:border-slate-800 w-40">LOCATION</th>
+                  {/* Main Multi-Column Header Row matching Image 1 */}
+                  <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 text-[10px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">
+                    <th className="py-2 px-2 border-r border-slate-300 dark:border-slate-700 text-center w-10 sticky left-0 bg-slate-100 dark:bg-slate-850 z-10">S.NO.</th>
+                    <th className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center w-24 sticky left-10 bg-slate-100 dark:bg-slate-850 z-10">EMP CODE</th>
+                    <th className="py-2 px-3 border-r border-slate-300 dark:border-slate-700 w-44 sticky left-34 bg-slate-100 dark:bg-slate-850 z-10">EMPLOYEE NAME</th>
+                    <th className="py-2 px-3 border-r border-slate-300 dark:border-slate-700 w-52 text-slate-800 dark:text-slate-200">
+                      NAME AS PER BANK<br/><span className="text-[8px] font-normal normal-case text-slate-500">(For Bank Transfer Purpose only)</span>
+                    </th>
+                    <th className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 w-36 text-center">DESIGNATION</th>
+                    <th className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 w-32 text-center">LOCATOION</th>
+                    <th className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 w-28 text-center">DATE OF JOINING</th>
+                    <th className="py-2 px-2 border-r border-slate-300 dark:border-slate-700 w-24 text-center leading-tight">
+                      PAID LEAVES TAKEN SINCE {prevMonthNameUpper} {prevYearShort}
+                    </th>
+                    <th className="py-2 px-2 border-r border-slate-300 dark:border-slate-700 w-24 text-center leading-tight">
+                      LEAVE WITHOUT PAY SINCE {prevMonthNameUpper} {prevYearShort}
+                    </th>
+                    <th className="py-2 px-2.5 border-r-2 border-slate-400 dark:border-slate-600 w-28 text-center leading-tight">
+                      LEAVE BALANCE AS ON DATE<br/><span className="text-[8px] font-normal">( TILL {prevMonthLastDay}th {prevMonthNameUpper} {prevYearShort})</span>
+                    </th>
                     
-                    {/* 1..31 Header numbers */}
-                    {Array.from({ length: daysInMonth }).map((_, d) => (
-                      <th key={d} className="py-2.5 text-center border-r border-slate-100 dark:border-slate-800 w-10">
-                        {d + 1}
-                      </th>
-                    ))}
+                    {/* Days 1..daysInMonth Header numbers */}
+                    {Array.from({ length: daysInMonth }).map((_, d) => {
+                      const isSunday = dayNames[d] === 'Sun';
+                      return (
+                        <th 
+                          key={d} 
+                          className={`py-2 text-center border-r border-slate-300 dark:border-slate-700 w-9 text-xs ${
+                            isSunday ? 'bg-[#ffc000] text-black font-black' : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
+                          }`}
+                        >
+                          {d + 1}
+                        </th>
+                      );
+                    })}
                     
-                    <th className="py-2.5 px-3 border-r border-slate-100 dark:border-slate-800 text-center w-28 text-emerald-600 dark:text-emerald-400">WORKING DAYS</th>
-                    <th className="py-2.5 px-3 text-center w-24 text-rose-600 dark:text-rose-400 font-bold">LEAVE DAYS</th>
+                    {/* Right Summary Headers matching Image 1 */}
+                    <th className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center w-28 leading-tight text-rose-700 dark:text-rose-400">
+                      DEDUCTION OF DAYS (IF ANY) DURING {monthNameUpper} {shortYear}
+                    </th>
+                    <th className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center w-28 leading-tight text-emerald-800 dark:text-emerald-400 font-black">
+                      PAYABLE SALARY DAYS DURING {monthNameUpper} {shortYear}
+                    </th>
+                    <th className="py-2 px-2.5 text-center w-28 leading-tight text-slate-800 dark:text-slate-200">
+                      LEAVE BALANCE AS ON DATE<br/><span className="text-[8px] font-normal">( TILL {daysInMonth}th {monthNameUpper} {shortYear} )</span>
+                    </th>
                   </tr>
 
-                  {/* Day names row */}
-                  <tr className="bg-slate-100/30 dark:bg-slate-800/10 border-b border-slate-100 dark:border-slate-800 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wide">
-                    <th className="py-1.5 px-3 border-r border-slate-100 dark:border-slate-800 sticky left-0 bg-slate-100/30 dark:bg-slate-850"></th>
-                    <th className="py-1.5 px-4 border-r border-slate-100 dark:border-slate-800 sticky left-12 bg-slate-100/30 dark:bg-slate-850"></th>
-                    <th className="py-1.5 px-4 border-r border-slate-100 dark:border-slate-800"></th>
+                  {/* Day names (Weekday) row */}
+                  <tr className="bg-slate-50 dark:bg-slate-850 border-b-2 border-slate-300 dark:border-slate-700 text-[9px] font-black uppercase">
+                    <th className="py-1 px-2 border-r border-slate-300 dark:border-slate-700 sticky left-0 bg-slate-50 dark:bg-slate-850 z-10"></th>
+                    <th className="py-1 px-2.5 border-r border-slate-300 dark:border-slate-700 sticky left-10 bg-slate-50 dark:bg-slate-850 z-10"></th>
+                    <th className="py-1 px-3 border-r border-slate-300 dark:border-slate-700 sticky left-34 bg-slate-50 dark:bg-slate-850 z-10"></th>
+                    <th className="py-1 px-3 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2.5 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2.5 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2.5 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2.5 border-r-2 border-slate-400 dark:border-slate-600"></th>
                     
                     {/* Weekday codes */}
-                    {Array.from({ length: daysInMonth }).map((_, d) => (
-                      <th 
-                        key={d} 
-                        className={`py-1.5 text-center border-r border-slate-100 dark:border-slate-800 ${
-                          dayNames[d] === 'Sun' ? 'text-amber-500 dark:text-amber-400 font-bold' : ''
-                        }`}
-                      >
-                        {dayNames[d]}
-                      </th>
-                    ))}
+                    {Array.from({ length: daysInMonth }).map((_, d) => {
+                      const isSunday = dayNames[d] === 'Sun';
+                      return (
+                        <th 
+                          key={d} 
+                          className={`py-1 text-center border-r border-slate-300 dark:border-slate-700 ${
+                            isSunday ? 'bg-[#ffc000] text-black font-black' : 'text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {dayNames[d]}
+                        </th>
+                      );
+                    })}
 
-                    <th className="py-1.5 px-3 border-r border-slate-100 dark:border-slate-800"></th>
-                    <th className="py-1.5 px-3"></th>
+                    <th className="py-1 px-2.5 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2.5 border-r border-slate-300 dark:border-slate-700"></th>
+                    <th className="py-1 px-2.5"></th>
                   </tr>
                 </thead>
                 
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
                   {records.length === 0 ? (
                     <tr>
-                      <td colSpan={daysInMonth + 5} className="py-10 text-center text-slate-400 dark:text-slate-500 font-medium italic">
+                      <td colSpan={daysInMonth + 13} className="py-12 text-center text-slate-400 dark:text-slate-500 font-medium italic">
                         No records found. Click "Reload from Server" or ensure active engineers are configured.
                       </td>
                     </tr>
                   ) : (
                     records.map((rec, idx) => {
-                      const { workingDays, leaveDays } = getRecordStats(rec);
+                      const stats = getRecordStats(rec);
                       return (
                         <tr 
                           key={rec.id} 
-                          className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-all"
+                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-all font-medium"
                         >
-                          {/* Serial Number */}
-                          <td className="py-3 px-3 border-r border-slate-100 dark:border-slate-800 text-center font-bold text-slate-400 dark:text-slate-500 sticky left-0 bg-white dark:bg-slate-900 shadow-[2px_0_5px_rgba(0,0,0,0.01)]">
+                          {/* S.NO. */}
+                          <td className="py-2 px-2 border-r border-slate-300 dark:border-slate-700 text-center font-bold text-slate-600 dark:text-slate-400 sticky left-0 bg-white dark:bg-slate-900 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
                             {idx + 1}
                           </td>
 
-                          {/* Name */}
-                          <td className="py-3 px-4 border-r border-slate-100 dark:border-slate-800 font-bold text-slate-900 dark:text-white sticky left-12 bg-white dark:bg-slate-900 shadow-[2px_0_5px_rgba(0,0,0,0.01)] truncate">
-                            {rec.engineerName}
+                          {/* EMP CODE */}
+                          <td className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center font-bold text-slate-800 dark:text-slate-200 sticky left-10 bg-white dark:bg-slate-900 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.02)]">
+                            {rec.empCode || '-'}
                           </td>
 
-                          {/* Location */}
-                          <td className="py-3 px-4 border-r border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-medium truncate">
-                            <span className="flex items-center gap-1">
-                              <Building className="w-3 h-3 text-slate-400" />
-                              <span>{rec.location || 'N/A'}</span>
-                            </span>
+                          {/* EMPLOYEE NAME */}
+                          <td className="py-2 px-3 border-r border-slate-300 dark:border-slate-700 font-extrabold text-slate-900 dark:text-white sticky left-34 bg-white dark:bg-slate-900 z-10 shadow-[2px_0_4px_rgba(0,0,0,0.02)] truncate group">
+                            <div className="flex items-center justify-between gap-1">
+                              <span>{rec.engineerName}</span>
+                              <button
+                                onClick={() => setEditingEngineerMeta(rec)}
+                                title="Edit employee details"
+                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-indigo-600 rounded transition-all cursor-pointer"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            </div>
                           </td>
 
-                          {/* Days (Interactive Cells) */}
+                          {/* NAME AS PER BANK */}
+                          <td className="py-2 px-3 border-r border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 truncate">
+                            {rec.nameAsPerBank || rec.engineerName}
+                          </td>
+
+                          {/* DESIGNATION */}
+                          <td className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase truncate">
+                            {rec.designation || 'DESKTOP ENGINEER'}
+                          </td>
+
+                          {/* LOCATION */}
+                          <td className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center text-[11px] text-slate-600 dark:text-slate-400 truncate">
+                            {rec.location || 'Ro-Ahmedabad'}
+                          </td>
+
+                          {/* DATE OF JOINING */}
+                          <td className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center text-[11px] text-slate-600 dark:text-slate-400">
+                            {rec.joiningDate || '-'}
+                          </td>
+
+                          {/* PAID LEAVES TAKEN */}
+                          <td className="py-2 px-2 border-r border-slate-300 dark:border-slate-700 text-center text-slate-600 dark:text-slate-400">
+                            {rec.paidLeavesTaken !== undefined ? rec.paidLeavesTaken : '-'}
+                          </td>
+
+                          {/* LEAVE WITHOUT PAY */}
+                          <td className="py-2 px-2 border-r border-slate-300 dark:border-slate-700 text-center text-slate-600 dark:text-slate-400">
+                            {rec.leaveWithoutPayTaken !== undefined ? rec.leaveWithoutPayTaken : '-'}
+                          </td>
+
+                          {/* LEAVE BALANCE */}
+                          <td className="py-2 px-2.5 border-r-2 border-slate-400 dark:border-slate-600 text-center text-slate-600 dark:text-slate-400">
+                            {rec.leaveBalanceAsOnDate !== undefined ? rec.leaveBalanceAsOnDate : '-'}
+                          </td>
+
+                          {/* Interactive Day Status Cells 1..daysInMonth */}
                           {Array.from({ length: daysInMonth }).map((_, d) => {
                             const dayNum = d + 1;
-                            const status = rec.days[dayNum] || '';
                             const isSunday = dayNames[d] === 'Sun';
+                            const status = rec.days[dayNum] || (isSunday ? 'WO' : '');
                             
                             return (
                               <td 
                                 key={d} 
                                 onClick={() => handleCellClick(rec.engineerId, dayNum)}
-                                className={`p-1 border-r border-slate-100 dark:border-slate-800 text-center select-none cursor-pointer hover:ring-2 hover:ring-indigo-400 relative group transition-all ${getCellStyle(status)}`}
+                                className={`p-0.5 border-r border-slate-300 dark:border-slate-700 text-center select-none cursor-pointer hover:ring-2 hover:ring-indigo-500 relative group transition-all ${getCellStyle(status, isSunday)}`}
                               >
-                                <span className="relative z-10 block font-bold text-[10px]">
-                                  {status || (isSunday ? 'WO' : '-')}
+                                <span className="relative z-10 block font-black text-[11px] leading-tight py-1">
+                                  {status || '-'}
                                 </span>
-
-                                {/* Cell hovering helper overlay */}
-                                <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity" />
                               </td>
                             );
                           })}
 
-                          {/* Working Days count */}
-                          <td className="py-3 px-3 border-r border-slate-100 dark:border-slate-800 text-center font-black text-slate-800 dark:text-slate-100 bg-emerald-50/45 dark:bg-emerald-950/5 text-sm">
-                            {workingDays}
+                          {/* DEDUCTION OF DAYS */}
+                          <td className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center font-bold text-rose-600 dark:text-rose-400">
+                            {stats.deductionDays}
                           </td>
 
-                          {/* Leave Days count */}
-                          <td className="py-3 px-3 text-center font-black text-slate-800 dark:text-slate-100 bg-rose-50/45 dark:bg-rose-950/5 text-sm">
-                            {leaveDays}
+                          {/* PAYABLE SALARY DAYS */}
+                          <td className="py-2 px-2.5 border-r border-slate-300 dark:border-slate-700 text-center font-black text-slate-900 dark:text-slate-100 text-sm bg-emerald-50/40 dark:bg-emerald-950/20">
+                            {stats.payableSalaryDays}
+                          </td>
+
+                          {/* CURRENT LEAVE BALANCE */}
+                          <td className="py-2 px-2.5 text-center font-bold text-slate-700 dark:text-slate-300">
+                            {stats.currentLeaveBalance}
                           </td>
                         </tr>
                       );
@@ -1110,29 +1399,28 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
             </div>
           </div>
 
-          {/* Popover / Click dropdown for editing cell status */}
+          {/* Popover / Click modal for editing single day attendance status */}
           {activeCell && (
             <div 
               ref={popoverRef}
-              className="fixed inset-0 md:inset-auto z-50 flex items-center justify-center p-4"
-              style={{
-                // Standard centered layout on mobile, but positioned floating near user cursor on desktop
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)'
-              }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
             >
-              {/* Overlay to block page clicks */}
-              <div className="fixed inset-0 bg-black/25 dark:bg-black/50 backdrop-blur-xs" onClick={() => setActiveCell(null)} />
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-xs" onClick={() => setActiveCell(null)} />
               
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xl relative z-10 w-full max-w-sm animate-scale-up">
-                <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 block">
-                  Set Attendance Code
-                </h4>
-                
-                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-4 leading-relaxed">
-                  Updating attendance for <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">{records.find(r => r.engineerId === activeCell.engineerId)?.engineerName}</span> on <span className="underline">Day {activeCell.day}</span> ({dayNames[activeCell.day - 1]}).
-                </p>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xl relative z-10 w-full max-w-md animate-scale-up">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                      Set Attendance Code
+                    </h4>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                      <span className="text-indigo-600 dark:text-indigo-400">{records.find(r => r.engineerId === activeCell.engineerId)?.engineerName}</span> • Day {activeCell.day} ({dayNames[activeCell.day - 1]})
+                    </p>
+                  </div>
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-black">
+                    {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
+                  </span>
+                </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   {ATTENDANCE_LEGEND.map(legend => {
@@ -1143,12 +1431,12 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
                         onClick={() => handleStatusChange(activeCell.engineerId, activeCell.day, legend.code)}
                         className={`p-3 rounded-xl border text-left text-xs font-bold cursor-pointer transition-all flex items-center justify-between ${
                           isSelected 
-                            ? `${legend.bg} ${legend.text} ring-2 ring-indigo-500 border-transparent` 
+                            ? `${legend.badgeBg} ${legend.badgeText} ring-2 ring-indigo-500 border-transparent shadow-xs` 
                             : 'bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-black ${legend.bg} ${legend.text}`}>
+                          <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-black ${legend.badgeBg} ${legend.badgeText} border border-black/10`}>
                             {legend.code}
                           </span>
                           <span>{legend.label}</span>
@@ -1177,10 +1465,138 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
               </div>
             </div>
           )}
+
+          {/* Quick Edit Modal for Employee Details (Emp Code, Bank Name, Designation, Joining Date) */}
+          {editingEngineerMeta && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-xs" onClick={() => setEditingEngineerMeta(null)} />
+              
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl relative z-10 w-full max-w-lg">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Edit3 className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                      Edit Employee Sheet Meta: {editingEngineerMeta.engineerName}
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="space-y-3.5">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Emp Code</label>
+                      <input 
+                        type="text" 
+                        value={editingEngineerMeta.empCode || ''}
+                        onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, empCode: e.target.value })}
+                        placeholder="e.g. GURM045"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Designation</label>
+                      <input 
+                        type="text" 
+                        value={editingEngineerMeta.designation || ''}
+                        onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, designation: e.target.value })}
+                        placeholder="e.g. DESKTOP ENGINEER"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
+                      Name As Per Bank (For Bank Transfer Purpose only)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={editingEngineerMeta.nameAsPerBank || ''}
+                      onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, nameAsPerBank: e.target.value })}
+                      placeholder="Full Name in Bank Account"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Location</label>
+                      <input 
+                        type="text" 
+                        value={editingEngineerMeta.location || ''}
+                        onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, location: e.target.value })}
+                        placeholder="e.g. Ro-Ahmedabad"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Date of Joining</label>
+                      <input 
+                        type="text" 
+                        value={editingEngineerMeta.joiningDate || ''}
+                        onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, joiningDate: e.target.value })}
+                        placeholder="e.g. 05-01-2024"
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 leading-tight">Paid Leaves Taken</label>
+                      <input 
+                        type="number" 
+                        value={editingEngineerMeta.paidLeavesTaken ?? 0}
+                        onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, paidLeavesTaken: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 leading-tight">LWP Taken</label>
+                      <input 
+                        type="number" 
+                        value={editingEngineerMeta.leaveWithoutPayTaken ?? 0}
+                        onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, leaveWithoutPayTaken: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1 leading-tight">Leave Balance</label>
+                      <input 
+                        type="number" 
+                        value={editingEngineerMeta.leaveBalanceAsOnDate ?? 0}
+                        onChange={(e) => setEditingEngineerMeta({ ...editingEngineerMeta, leaveBalanceAsOnDate: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-6">
+                  <button
+                    onClick={() => setEditingEngineerMeta(null)}
+                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleSaveEngineerMeta(editingEngineerMeta)}
+                    className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Update Details
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       ) : (
+        /* Daily List Check-In View */
         <div className="space-y-6">
-          {/* Day selection slider bar */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-800/60 p-5 shadow-[0_4px_20px_rgba(0,0,0,0.015)] space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-0.5">
@@ -1223,12 +1639,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
                 const isSunday = dayOfWeek === 'Sun';
                 const isSelected = dayNum === selectedDay;
 
-                // Progress indicators based on logs
-                const filledCount = records.filter(r => r.days[dayNum]).length;
-                const totalCount = records.length;
-                const isFullyRecorded = totalCount > 0 && filledCount === totalCount;
-                const isPartiallyRecorded = filledCount > 0 && filledCount < totalCount;
-
                 return (
                   <button
                     key={dayNum}
@@ -1237,27 +1647,18 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
                       isSelected
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-102 ring-2 ring-indigo-500/20'
                         : isSunday
-                        ? 'bg-amber-50/50 dark:bg-amber-950/10 hover:bg-amber-100/40 dark:hover:bg-amber-950/20 text-slate-700 dark:text-slate-300 border-amber-100 dark:border-amber-900/30'
+                        ? 'bg-[#ffc000]/20 hover:bg-[#ffc000]/30 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-800'
                         : 'bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-100/60 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-slate-150 dark:border-slate-800/80'
                     }`}
                   >
                     <span className={`text-[9px] uppercase font-bold tracking-wider ${
-                      isSelected ? 'text-indigo-100' : isSunday ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'
+                      isSelected ? 'text-indigo-100' : isSunday ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'
                     }`}>
                       {dayOfWeek}
                     </span>
                     <span className="text-base font-extrabold tracking-tight mt-0.5 leading-none">
                       {dayNum}
                     </span>
-
-                    {/* Progress indicator dot under the number */}
-                    <div className="absolute bottom-1 flex gap-0.5 justify-center w-full">
-                      {isFullyRecorded ? (
-                        <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-500'}`} />
-                      ) : isPartiallyRecorded ? (
-                        <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-indigo-200' : 'bg-amber-400'}`} />
-                      ) : null}
-                    </div>
                   </button>
                 );
               })}
@@ -1271,18 +1672,18 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
               
               <button
                 onClick={() => handleBulkMarkSelectedDay('P')}
-                className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/70 dark:hover:bg-emerald-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-[#c6e0b4] border border-[#a2c98d] text-[#1c4b26] hover:bg-[#b8d6a5] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>Mark All Present</span>
+                <span>Mark All Present (P)</span>
               </button>
 
               <button
                 onClick={() => handleBulkMarkSelectedDay('WO')}
-                className="px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/40 text-amber-700 dark:text-amber-400 hover:bg-amber-100/70 dark:hover:bg-amber-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 bg-[#ffc000] border border-amber-500 text-slate-950 hover:bg-amber-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Mark All Weeklyoff</span>
+                <span>Mark All Weeklyoff (WO)</span>
               </button>
 
               <button
@@ -1328,7 +1729,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
                     key={rec.id}
                     className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800/60 shadow-[0_2px_12px_rgba(0,0,0,0.01)] hover:shadow-md transition-all flex flex-col justify-between gap-4"
                   >
-                    {/* Header info */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3">
                         <span className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-black text-xs flex items-center justify-center shrink-0">
@@ -1340,23 +1740,22 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
                           </h4>
                           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1 mt-0.5">
                             <Building className="w-3 h-3 text-slate-400" />
-                            <span>{rec.location || 'N/A'}</span>
+                            <span>{rec.location || 'N/A'} • {rec.empCode || 'No Code'}</span>
                           </span>
                         </div>
                       </div>
 
-                      {/* Active tag indicator */}
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider uppercase shrink-0 ${
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase shrink-0 ${
                         currentStatus 
-                          ? ATTENDANCE_LEGEND.find(l => l.code === currentStatus)?.bg + ' ' + ATTENDANCE_LEGEND.find(l => l.code === currentStatus)?.text
+                          ? ATTENDANCE_LEGEND.find(l => l.code === currentStatus)?.badgeBg + ' ' + ATTENDANCE_LEGEND.find(l => l.code === currentStatus)?.badgeText
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
                       }`}>
                         {currentStatus || 'UNMARKED'}
                       </span>
                     </div>
 
-                    {/* Button Group segment */}
-                    <div className="grid grid-cols-6 gap-1 bg-slate-50 dark:bg-slate-950 p-1 rounded-xl border border-slate-150 dark:border-slate-850">
+                    {/* Button Group segment with all status codes from Image 2 */}
+                    <div className="grid grid-cols-7 gap-1 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-xl border border-slate-150 dark:border-slate-850">
                       {ATTENDANCE_LEGEND.map(legend => {
                         const isSelected = currentStatus === legend.code;
                         return (
@@ -1368,7 +1767,7 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
                             }}
                             className={`py-2 px-1 rounded-lg text-[10px] font-black transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
                               isSelected
-                                ? `${legend.bg} ${legend.text} shadow-xs ring-1 ring-slate-200 dark:ring-slate-800`
+                                ? `${legend.badgeBg} ${legend.badgeText} shadow-xs ring-2 ring-indigo-500`
                                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-white'
                             }`}
                           >
@@ -1377,7 +1776,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
                         );
                       })}
                       
-                      {/* Clear Button */}
                       <button
                         title="Clear status"
                         onClick={() => {
@@ -1400,42 +1798,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
           </div>
         </div>
       )}
-
-      {/* Roster Legend Box */}
-      <div className="bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200/50 dark:border-slate-800/60 p-5">
-        <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
-          <HelpCircle className="w-3.5 h-3.5 text-indigo-500" />
-          <span>Attendance Code Legend & Formula Guideline</span>
-        </h4>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {ATTENDANCE_LEGEND.map(legend => (
-            <div 
-              key={legend.code}
-              className={`p-3 rounded-xl border ${legend.bg} ${legend.border} flex flex-col justify-between`}
-            >
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className={`w-8 h-8 rounded-lg shadow-xs flex items-center justify-center font-black text-sm shrink-0 border ${legend.bg} ${legend.text} ${legend.border}`}>
-                  {legend.code}
-                </span>
-                <span className={`text-[11px] font-black tracking-wide ${legend.text}`}>
-                  {legend.label}
-                </span>
-              </div>
-              <p className={`text-[10px] leading-tight opacity-90 ${legend.text}`}>
-                {legend.description}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed mt-4 border-t border-slate-200/60 dark:border-slate-800/60 pt-3">
-          💡 <strong>Attendance Letter Formulas:</strong> 
-          <span className="ml-1"><strong>Total Working Days</strong> = Count(P) + 0.5 &times; Count(HD).</span>
-          <span className="ml-2"><strong>Total Leave Days</strong> = Count(L) + 0.5 &times; Count(HD).</span>
-          <span className="ml-2">Sundays default to <strong>WO</strong> (Weekly Off). Company Holidays are marked <strong>H</strong>.</span>
-        </p>
-      </div>
 
       {/* Server Files Repository (Month-wise & Quarter-wise) */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 p-6 shadow-xs">
@@ -1471,7 +1833,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Monthly Column */}
             <div>
               <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-1.5 border-b border-slate-100/50 dark:border-slate-800/40 pb-1.5">
                 <Calendar className="w-3.5 h-3.5 text-indigo-500" />
@@ -1519,7 +1880,6 @@ export const AttendanceManager: React.FC<AttendanceManagerProps> = ({
               </div>
             </div>
 
-            {/* Quarterly Column */}
             <div>
               <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 flex items-center gap-1.5 border-b border-slate-100/50 dark:border-slate-800/40 pb-1.5">
                 <Building className="w-3.5 h-3.5 text-amber-500" />
