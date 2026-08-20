@@ -119,6 +119,45 @@ const formatToCustomDate = (dateStr?: string) => {
   return dateStr;
 };
 
+export const compareTicketsAscending = (a: Ticket, b: Ticket): number => {
+  const tidA = String(a.ticket_id || '').trim();
+  const tidB = String(b.ticket_id || '').trim();
+
+  // Extract numerical portions for natural ascending numeric order (e.g. 1, 2, 3... 24, 25, 26)
+  const matchA = tidA.match(/\d+/g);
+  const matchB = tidB.match(/\d+/g);
+  const numA = matchA ? parseInt(matchA[matchA.length - 1], 10) : NaN;
+  const numB = matchB ? parseInt(matchB[matchB.length - 1], 10) : NaN;
+
+  if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+    return numA - numB;
+  }
+
+  // Alphanumeric natural compare if no distinct numbers or same number
+  const strComp = tidA.localeCompare(tidB, undefined, { numeric: true, sensitivity: 'base' });
+  if (strComp !== 0) return strComp;
+
+  // Date comparison fallback
+  const dateA = a.date ? a.date.trim() : '';
+  const dateB = b.date ? b.date.trim() : '';
+  if (dateA && dateB && dateA !== dateB) {
+    const timeA = new Date(dateA).getTime();
+    const timeB = new Date(dateB).getTime();
+    if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+      return timeA - timeB;
+    }
+  }
+
+  // Created at fallback
+  const createA = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const createB = b.created_at ? new Date(b.created_at).getTime() : 0;
+  if (createA && createB) {
+    return createA - createB;
+  }
+
+  return 0;
+};
+
 const formatTicketHorizontal = (t: Ticket): string => {
   const tid = t.ticket_id || '';
   const dateVal = t.date || '';
@@ -211,7 +250,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
 
   // Sorting State
   const [sortField, setSortField] = useState<keyof Ticket | 'resolution_days'>('ticket_id');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -276,7 +315,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       
       // Check month match
       return activePeriod.months.includes(parsed.monthIndex);
-    });
+    }).sort(compareTicketsAscending);
   }, [tickets, activePeriod, selectedReportYear]);
 
   const reportStats = useMemo(() => {
@@ -591,6 +630,9 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       return;
     }
 
+    // Always sort ticket logs in ascending order (e.g. 1, 2, 3... or earliest to latest)
+    const sortedTickets = [...filteredAndSortedTickets].sort(compareTicketsAscending);
+
     const headers = [
       'Sr no.',
       'Ticket Number',
@@ -613,7 +655,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       'Resolution Days'
     ].join('\t');
 
-    const rows = filteredAndSortedTickets.map((t, idx) => {
+    const rows = sortedTickets.map((t, idx) => {
       const srNo = String(idx + 1);
       
       const tid = t.ticket_id || '';
@@ -661,7 +703,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
     const tabularText = [headers, ...rows].join('\n');
 
     navigator.clipboard.writeText(tabularText)
-      .then(() => showToast(`Copied ${filteredAndSortedTickets.length} visible ticket(s) as spreadsheet-ready tabular data!`, 'success'))
+      .then(() => showToast(`Copied ${sortedTickets.length} ticket log(s) in ascending order!`, 'success'))
       .catch(() => showToast('Failed to copy tabular data', 'error'));
   };
 
@@ -1874,10 +1916,12 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               {/* Copy ID(s) option - styled secondary if Edit is present, otherwise primary */}
               <button
                 onClick={() => {
-                  const selectedList = tickets.filter(t => selectedTicketIds.includes(t.id));
+                  const selectedList = tickets
+                    .filter(t => selectedTicketIds.includes(t.id))
+                    .sort(compareTicketsAscending);
                   const idsText = selectedList.map(t => t.ticket_id).join('\n');
                   navigator.clipboard.writeText(idsText)
-                    .then(() => showToast(`Copied ${selectedTicketIds.length} ticket ID(s) to clipboard!`, 'success'))
+                    .then(() => showToast(`Copied ${selectedTicketIds.length} ticket ID(s) in ascending order!`, 'success'))
                     .catch(() => showToast('Failed to copy', 'error'));
                 }}
                 className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
@@ -1885,26 +1929,28 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                     ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300'
                     : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                 }`}
-                title="Copy Ticket ID(s)"
+                title="Copy Ticket ID(s) in ascending order"
               >
                 <Copy className="w-3 h-3" />
-                <span>Copy ID{selectedTicketIds.length > 1 ? 's' : ''}</span>
+                <span>Copy ID{selectedTicketIds.length > 1 ? 's' : ''} (Asc)</span>
               </button>
 
               {/* Copy Details option */}
               <button
                 onClick={() => {
-                  const selectedList = tickets.filter(t => selectedTicketIds.includes(t.id));
+                  const selectedList = tickets
+                    .filter(t => selectedTicketIds.includes(t.id))
+                    .sort(compareTicketsAscending);
                   const detailsText = selectedList.map(t => formatTicketHorizontal(t)).join('\n');
                   navigator.clipboard.writeText(detailsText)
-                    .then(() => showToast(`Copied ${selectedTicketIds.length} ticket(s) in horizontal format!`, 'success'))
+                    .then(() => showToast(`Copied ${selectedTicketIds.length} ticket log(s) in ascending order!`, 'success'))
                     .catch(() => showToast('Failed to copy', 'error'));
                 }}
                 className="px-2.5 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/40 dark:text-indigo-400 rounded-lg text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5"
-                title="Copy full ticket details as tabular data"
+                title="Copy full ticket details as tabular data in ascending order"
               >
                 <Copy className="w-3 h-3" />
-                <span>Copy Details</span>
+                <span>Copy Details (Asc)</span>
               </button>
 
               <button
@@ -2854,14 +2900,82 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handlePrintPeriodReport(activePeriod, selectedReportYear, periodFilteredTickets)}
-                      className="px-4.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-md shadow-indigo-600/10 flex items-center gap-2 cursor-pointer transition-all self-stretch sm:self-auto justify-center"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      Print Period Report
-                    </button>
+                    <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (periodFilteredTickets.length === 0) {
+                            showToast('No tickets to copy in this period!', 'error');
+                            return;
+                          }
+                          const headers = [
+                            'Sr no.',
+                            'Ticket Number',
+                            'Date',
+                            'Username',
+                            'Contact Number',
+                            'Location/ Address',
+                            'Product',
+                            'CATEGORY',
+                            'Model',
+                            'System Sr no.',
+                            'Problem',
+                            'Assign to',
+                            'Action Taken',
+                            'First Visit Date',
+                            'Hold Date',
+                            'Close Date',
+                            'Status',
+                            'Remark of Engineer',
+                            'Resolution Days'
+                          ].join('\t');
+
+                          const rows = periodFilteredTickets.map((t, idx) => {
+                            const srNo = String(idx + 1);
+                            return [
+                              srNo,
+                              t.ticket_id || '',
+                              t.date || '',
+                              t.username || '',
+                              t.contact || '',
+                              t.location || '',
+                              t.product || '',
+                              t.category || '',
+                              t.model || '',
+                              t.serial_number || '',
+                              t.problem || '',
+                              t.engineer || '',
+                              (t.action_taken === 'N/A' || !t.action_taken) ? '' : t.action_taken,
+                              t.first_visit_date || '',
+                              t.hold_date || '',
+                              t.close_date || '',
+                              t.status || '',
+                              (t.engineer_remark === 'N/A' || !t.engineer_remark) ? '' : t.engineer_remark,
+                              calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status).text
+                            ].join('\t');
+                          });
+
+                          const tabularText = [headers, ...rows].join('\n');
+                          navigator.clipboard.writeText(tabularText)
+                            .then(() => showToast(`Copied ${periodFilteredTickets.length} period ticket logs in ascending order!`, 'success'))
+                            .catch(() => showToast('Failed to copy period logs', 'error'));
+                        }}
+                        className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all border border-slate-200 dark:border-slate-700"
+                        title="Copy period ticket logs in ascending order"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>Copy Logs (Asc)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePrintPeriodReport(activePeriod, selectedReportYear, periodFilteredTickets)}
+                        className="px-4.5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 shadow-md shadow-indigo-600/10 flex items-center gap-2 cursor-pointer transition-all justify-center"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Print Period Report
+                      </button>
+                    </div>
                   </div>
 
                   {/* Summary Cards Panel */}
