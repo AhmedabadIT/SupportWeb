@@ -8,6 +8,7 @@ import {
 } from '../utils/locationUtils';
 import { LocationMap } from './LocationMap';
 import { CreateTicketForm } from './CreateTicketForm';
+import { INITIAL_ENGINEERS } from '../utils/initialData';
 import { 
   Inbox, 
   Clock, 
@@ -75,7 +76,8 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
   // Selected Engineer Name (synced with logged in engineer or fallback simulation)
   const [selectedEngineerName, setSelectedEngineerName] = useState<string>(() => {
     if (authenticatedEngineer) return authenticatedEngineer.name;
-    return engineers.length > 0 ? engineers[0].name : '';
+    const list = (engineers && engineers.length > 0) ? engineers : INITIAL_ENGINEERS;
+    return list.length > 0 ? list[0].name : '';
   });
 
   useEffect(() => {
@@ -945,12 +947,13 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
               value={selectedEngineerName}
               onChange={(e) => {
                 setSelectedEngineerName(e.target.value);
-                const found = engineers.find(eng => eng.name === e.target.value);
+                const list = (engineers && engineers.length > 0) ? engineers : INITIAL_ENGINEERS;
+                const found = list.find(eng => eng.name === e.target.value);
                 if (found) setAuthenticatedEngineer(found);
               }}
               className="text-xs font-bold p-2 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 rounded-xl focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
             >
-              {engineers.map(eng => (
+              {((engineers && engineers.length > 0) ? engineers : INITIAL_ENGINEERS).map(eng => (
                 <option key={eng.id} value={eng.name}>{eng.name}</option>
               ))}
             </select>
@@ -1754,7 +1757,7 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                     className="w-full text-xs font-bold p-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
                   >
                     <option value="all">👥 All Engineers (Full Company Log)</option>
-                    {engineers.map(eng => (
+                    {((engineers && engineers.length > 0) ? engineers : INITIAL_ENGINEERS).map(eng => (
                       <option key={eng.id} value={eng.name}>
                         👤 {eng.name} ({eng.work_profile || 'Engineer'})
                       </option>

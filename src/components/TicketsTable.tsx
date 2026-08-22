@@ -3,6 +3,7 @@ import { Ticket, Engineer } from '../types';
 import * as XLSX from 'xlsx';
 import { calculateDaysBetweenVisitAndClose } from '../utils/dateUtils';
 import { normalizeModelString } from '../utils/modelNormalization';
+import { INITIAL_ENGINEERS } from '../utils/initialData';
 import { 
   Search, 
   Filter, 
@@ -1454,7 +1455,8 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
           if (foundOfficialName) {
             processed.engineer = foundOfficialName;
           } else {
-            const matchedEng = engineers.find(eng => {
+            const list = (engineers && engineers.length > 0) ? engineers : INITIAL_ENGINEERS;
+            const matchedEng = list.find(eng => {
               const engName = eng.name.trim().toLowerCase();
               return engName === engInput || engName.includes(engInput) || engInput.includes(engName);
             });
@@ -1822,7 +1824,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                   className="w-full text-xs p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 >
                   <option value="all">All Engineers</option>
-                  {engineers.map(eng => (
+                  {((engineers && engineers.length > 0) ? engineers : INITIAL_ENGINEERS).map(eng => (
                     <option key={eng.id} value={eng.name}>{eng.name}</option>
                   ))}
                   <option value="Others...">Others...</option>

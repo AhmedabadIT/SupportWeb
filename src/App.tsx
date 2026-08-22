@@ -87,25 +87,58 @@ export default function App() {
   };
 
   // Database Data State
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [engineers, setEngineers] = useState<Engineer[]>([]);
-  const [visits, setVisits] = useState<LocationVisit[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tickets, setTickets] = useState<Ticket[]>(() => {
+    try {
+      const cached = localStorage.getItem('cached_tickets');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return INITIAL_TICKETS;
+  });
+
+  const [engineers, setEngineers] = useState<Engineer[]>(() => {
+    try {
+      const cached = localStorage.getItem('cached_engineers');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return INITIAL_ENGINEERS;
+  });
+
+  const [visits, setVisits] = useState<LocationVisit[]>(() => {
+    try {
+      const cached = localStorage.getItem('cached_visits');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch(e) {}
+    return INITIAL_VISITS;
+  });
+  const [isLoading, setIsLoading] = useState(false);
 
   // Derived systems data
   const systemTickets = React.useMemo(() => {
+    const list = (tickets && tickets.length > 0) ? tickets : INITIAL_TICKETS;
     if (systemMode === 'Surat') {
-      return tickets.filter(t => (t.ticket_id && t.ticket_id.toLowerCase().startsWith('sur-')) || (t.location && t.location.toLowerCase().includes('surat')));
+      return list.filter(t => (t.ticket_id && t.ticket_id.toLowerCase().startsWith('sur-')) || (t.location && t.location.toLowerCase().includes('surat')));
     } else {
-      return tickets.filter(t => !(t.ticket_id && t.ticket_id.toLowerCase().startsWith('sur-')) && !(t.location && t.location.toLowerCase().includes('surat')));
+      return list.filter(t => !(t.ticket_id && t.ticket_id.toLowerCase().startsWith('sur-')) && !(t.location && t.location.toLowerCase().includes('surat')));
     }
   }, [tickets, systemMode]);
 
   const systemEngineers = React.useMemo(() => {
+    const list = (engineers && engineers.length > 0) ? engineers : INITIAL_ENGINEERS;
     if (systemMode === 'Surat') {
-      return engineers.filter(e => (e.location && e.location.toLowerCase().includes('surat')) || e.name === 'Mayur Ahir' || e.name === 'Jenil Kosambiya');
+      const suratList = list.filter(e => (e.location && e.location.toLowerCase().includes('surat')) || e.name === 'Mayur Ahir' || e.name === 'Jenil Kosambiya');
+      return suratList.length > 0 ? suratList : list;
     } else {
-      return engineers.filter(e => !(e.location && e.location.toLowerCase().includes('surat')) && e.name !== 'Mayur Ahir' && e.name !== 'Jenil Kosambiya');
+      const roList = list.filter(e => !(e.location && e.location.toLowerCase().includes('surat')) && e.name !== 'Mayur Ahir' && e.name !== 'Jenil Kosambiya');
+      return roList.length > 0 ? roList : list;
     }
   }, [engineers, systemMode]);
 

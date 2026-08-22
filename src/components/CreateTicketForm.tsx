@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, Engineer } from '../types';
 import { calculateDaysBetweenVisitAndClose } from '../utils/dateUtils';
 import { normalizeModelString, getHardwareAliasSuggestion } from '../utils/modelNormalization';
+import { INITIAL_ENGINEERS } from '../utils/initialData';
 import { 
   Sparkles, 
   Trash2, 
@@ -88,6 +89,16 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
   const isMissingEngineer = !engineer.trim();
 
   const hasValidationErrors = isMissingLocation || isMissingUsername || isMissingContact || isMissingProblem || isMissingEngineer;
+
+  // Reliable available engineers list with fallback to INITIAL_ENGINEERS
+  const availableEngineers = useMemo(() => {
+    const list = (engineers && Array.isArray(engineers) && engineers.length > 0) ? engineers : INITIAL_ENGINEERS;
+    return list;
+  }, [engineers]);
+
+  const activeEngineersList = useMemo(() => {
+    return availableEngineers.filter(e => e.active);
+  }, [availableEngineers]);
 
   // Prefill when editing
   useEffect(() => {
@@ -488,7 +499,7 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
         if (foundOfficialName) {
           mappedEngineer = foundOfficialName;
         } else {
-          const matched = engineers.find(eng => {
+          const matched = availableEngineers.find(eng => {
             const engName = eng.name.trim().toLowerCase();
             return engName === cleanEng || engName.includes(cleanEng) || cleanEng.includes(engName);
           });
@@ -1024,29 +1035,113 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
               />
             </div>
 
-            {/* Engineer Assignment Dropdown / Manual Field */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Assigned Engineer <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                list="engineers-datalist"
-                value={engineer}
-                onChange={(e) => setEngineer(e.target.value)}
-                placeholder="Type or select engineer name..."
-                className={`w-full text-sm p-2.5 border rounded-xl bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 ${
-                  touched && isMissingEngineer 
-                    ? 'border-rose-300 bg-rose-50/20 dark:border-rose-950 dark:bg-rose-950/20' 
-                    : 'border-slate-200 dark:border-slate-800'
-                }`}
-              />
-              <datalist id="engineers-datalist">
-                {engineers.filter(e => e.active).map(eng => (
-                  <option key={eng.id} value={eng.name} />
-                ))}
-              </datalist>
-              <p className="text-[10px] text-slate-400">Select an engineer from the list or enter manually.</p>
+            {/* Engineer Assignment Dropdown / Selector & Quick Chips */}
+            <div className="space-y-2 md:col-span-2 bg-slate-50/70 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-indigo-500" />
+                  Assigned Engineer <span className="text-rose-500">*</span>
+                </label>
+                {engineer && (
+                  <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-900/50">
+                    Assigned: {engineer}
+                  </span>
+                )}
+              </div>
+
+              {/* Primary Select Dropdown */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                    Select from Registered Engineers:
+                  </label>
+                  <select
+                    id="assigned-engineer-select"
+                    value={
+                      activeEngineersList.some(e => e.name.toLowerCase() === engineer.trim().toLowerCase())
+                        ? (activeEngineersList.find(e => e.name.toLowerCase() === engineer.trim().toLowerCase())?.name || engineer)
+                        : (availableEngineers.some(e => e.name.toLowerCase() === engineer.trim().toLowerCase())
+                            ? availableEngineers.find(e => e.name.toLowerCase() === engineer.trim().toLowerCase())?.name
+                            : (engineer ? '__custom__' : ''))
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val && val !== '__custom__') {
+                        setEngineer(val);
+                      }
+                    }}
+                    className={`w-full mt-1 text-sm p-2.5 border rounded-xl bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer font-bold ${
+                      touched && isMissingEngineer 
+                        ? 'border-rose-300 bg-rose-50/20 dark:border-rose-950 dark:bg-rose-950/20' 
+                        : 'border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    <option value="">-- Choose Assigned Engineer --</option>
+                    <optgroup label="Active Field Engineers">
+                      {activeEngineersList.map(eng => (
+                        <option key={eng.id || eng.name} value={eng.name}>
+                          👤 {eng.name} {eng.location ? `(${eng.location})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {availableEngineers.filter(e => !e.active).length > 0 && (
+                      <optgroup label="Other / Resigned Engineers">
+                        {availableEngineers.filter(e => !e.active).map(eng => (
+                          <option key={eng.id || eng.name} value={eng.name}>
+                            {eng.name} (Inactive)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <option value="__custom__">✏️ Other / Enter Custom Name Below...</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                    Or Type / Edit Name:
+                  </label>
+                  <input
+                    type="text"
+                    list="engineers-datalist"
+                    value={engineer}
+                    onChange={(e) => setEngineer(e.target.value)}
+                    placeholder="Type or refine engineer name..."
+                    className={`w-full mt-1 text-sm p-2.5 border rounded-xl bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 ${
+                      touched && isMissingEngineer 
+                        ? 'border-rose-300 bg-rose-50/20 dark:border-rose-950 dark:bg-rose-950/20' 
+                        : 'border-slate-200 dark:border-slate-800'
+                    }`}
+                  />
+                  <datalist id="engineers-datalist">
+                    {availableEngineers.map(eng => (
+                      <option key={eng.id || eng.name} value={eng.name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              {/* 1-Click Quick Select Chips */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">1-Click Assign:</span>
+                {activeEngineersList.slice(0, 10).map(eng => {
+                  const isSelected = engineer.trim().toLowerCase() === eng.name.trim().toLowerCase();
+                  return (
+                    <button
+                      key={eng.id || eng.name}
+                      type="button"
+                      onClick={() => setEngineer(eng.name)}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 shadow-xs'
+                      }`}
+                    >
+                      {eng.name.split(' ')[0]}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Resolution & Execution Details Header */}
