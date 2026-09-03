@@ -731,15 +731,10 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
         <td style="font-family: monospace; font-weight: bold; color: #1e40af;">${t.ticket_id}</td>
         <td>${t.date}</td>
         <td>${t.username}</td>
-        <td>${t.contact}</td>
         <td class="wrap-col-md">${t.location}</td>
         <td>${t.product || ''}</td>
-        <td>${t.category || ''}</td>
-        <td>${t.brand || ''}</td>
-        <td>${t.model || ''}</td>
         <td>${t.serial_number || ''}</td>
-        <td class="wrap-col-lg">${t.problem}</td>
-        <td>${t.engineer}</td>
+        <td>${formatEngineerShortName(t.engineer)}</td>
         <td style="text-align: center;">
           <span class="status-badge ${t.status.toLowerCase()}">${t.status}</span>
         </td>
@@ -747,8 +742,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
         <td>${t.first_visit_date || ''}</td>
         <td>${t.hold_date || ''}</td>
         <td>${t.close_date || ''}</td>
-        <td class="wrap-col-md">${t.remarks || ''}</td>
-        <td>${calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status).text}</td>
+        <td class="wrap-col-md">${t.engineer_remark || ''}</td>
       </tr>
     `).join('');
 
@@ -798,13 +792,13 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
             table {
               width: 100%;
               border-collapse: collapse;
-              font-size: 7px;
-              line-height: 1.15;
+              font-size: 8px;
+              line-height: 1.2;
               table-layout: auto;
             }
             th, td {
               border: 1px solid #cbd5e1;
-              padding: 3px 3px;
+              padding: 3.5px 4px;
               text-align: left;
               vertical-align: top;
               white-space: normal;
@@ -815,23 +809,23 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               font-weight: 800;
               color: #334155;
               text-transform: uppercase;
-              font-size: 6.5px;
+              font-size: 7.5px;
               letter-spacing: 0.3px;
             }
             .wrap-col-md {
-              max-width: 90px;
-              min-width: 50px;
+              max-width: 95px;
+              min-width: 55px;
             }
             .wrap-col-lg {
-              max-width: 130px;
-              min-width: 70px;
+              max-width: 150px;
+              min-width: 80px;
             }
             .status-badge {
               display: inline-block;
               padding: 1px 4px;
               border-radius: 3px;
               font-weight: 800;
-              font-size: 6.5px;
+              font-size: 7px;
               text-align: center;
               white-space: nowrap;
             }
@@ -844,7 +838,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               padding: 1px 4px;
               border-radius: 3px;
               font-weight: 800;
-              font-size: 6.5px;
+              font-size: 7px;
               text-align: center;
               white-space: nowrap;
             }
@@ -871,14 +865,9 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                 <th>Ticket ID</th>
                 <th>Date</th>
                 <th>Username</th>
-                <th>Contact</th>
                 <th>Location</th>
                 <th>Product</th>
-                <th>Category</th>
-                <th>Brand</th>
-                <th>Model</th>
                 <th>Serial Number</th>
-                <th>Problem</th>
                 <th>Engineer</th>
                 <th style="text-align: center;">Status</th>
                 <th>Action Taken</th>
@@ -886,7 +875,6 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                 <th>Hold Date</th>
                 <th>Close Date</th>
                 <th>Remarks</th>
-                <th>Resolution Days</th>
               </tr>
             </thead>
             <tbody>
@@ -923,15 +911,10 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
         <td style="font-family: monospace; font-weight: bold; color: #1e40af;">${t.ticket_id}</td>
         <td>${t.date}</td>
         <td>${t.username}</td>
-        <td>${t.contact}</td>
         <td class="wrap-col-md">${t.location}</td>
         <td>${t.product || ''}</td>
-        <td>${t.category || ''}</td>
-        <td>${t.brand || ''}</td>
-        <td>${t.model || ''}</td>
         <td>${t.serial_number || ''}</td>
-        <td class="wrap-col-lg">${t.problem}</td>
-        <td>${t.engineer}</td>
+        <td>${formatEngineerShortName(t.engineer)}</td>
         <td style="text-align: center;">
           <span class="status-badge ${t.status.toLowerCase()}">${t.status}</span>
         </td>
@@ -940,7 +923,6 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
         <td>${t.hold_date || ''}</td>
         <td>${t.close_date || ''}</td>
         <td class="wrap-col-md">${t.engineer_remark || ''}</td>
-        <td>${calculateDaysBetweenVisitAndClose(t.first_visit_date, t.close_date, t.date, t.status).text}</td>
       </tr>
     `).join('');
 
@@ -1010,13 +992,13 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
             table {
               width: 100%;
               border-collapse: collapse;
-              font-size: 7px;
-              line-height: 1.15;
+              font-size: 8px;
+              line-height: 1.2;
               table-layout: auto;
             }
             th, td {
               border: 1px solid #cbd5e1;
-              padding: 3px 3px;
+              padding: 3.5px 4px;
               text-align: left;
               vertical-align: top;
               white-space: normal;
@@ -1027,23 +1009,23 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               font-weight: 800;
               color: #334155;
               text-transform: uppercase;
-              font-size: 6.5px;
+              font-size: 7.5px;
               letter-spacing: 0.3px;
             }
             .wrap-col-md {
-              max-width: 90px;
-              min-width: 50px;
+              max-width: 95px;
+              min-width: 55px;
             }
             .wrap-col-lg {
-              max-width: 130px;
-              min-width: 70px;
+              max-width: 150px;
+              min-width: 80px;
             }
             .status-badge {
               display: inline-block;
               padding: 1px 4px;
               border-radius: 3px;
               font-weight: 800;
-              font-size: 6.5px;
+              font-size: 7px;
               text-align: center;
               white-space: nowrap;
             }
@@ -1056,7 +1038,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               padding: 1px 4px;
               border-radius: 3px;
               font-weight: 800;
-              font-size: 6.5px;
+              font-size: 7px;
               text-align: center;
               white-space: nowrap;
             }
@@ -1091,14 +1073,9 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                 <th>Ticket ID</th>
                 <th>Date</th>
                 <th>Username</th>
-                <th>Contact</th>
                 <th>Location</th>
                 <th>Product</th>
-                <th>Category</th>
-                <th>Brand</th>
-                <th>Model</th>
                 <th>Serial Number</th>
-                <th>Problem</th>
                 <th>Engineer</th>
                 <th style="text-align: center;">Status</th>
                 <th>Action Taken</th>
@@ -1106,13 +1083,12 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                 <th>Hold Date</th>
                 <th>Close Date</th>
                 <th>Remarks</th>
-                <th>Resolution Days</th>
               </tr>
             </thead>
             <tbody>
               ${periodTickets.length === 0 ? `
                 <tr>
-                  <td colspan="19" style="text-align: center; padding: 20px; color: #64748b; font-weight: bold;">
+                  <td colspan="14" style="text-align: center; padding: 20px; color: #64748b; font-weight: bold;">
                     No tickets found in this period.
                   </td>
                 </tr>

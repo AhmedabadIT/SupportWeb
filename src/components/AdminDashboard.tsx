@@ -605,7 +605,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Month Header Row
       tableHtml += `
         <tr style="background-color: #1e293b; color: #ffffff; font-weight: 800; font-size: 11px;">
-          <td colspan="14" style="padding: 8px 10px; background-color: #1e293b; color: #f8fafc; border: 1px solid #0f172a;">
+          <td colspan="12" style="padding: 8px 10px; background-color: #1e293b; color: #f8fafc; border: 1px solid #0f172a;">
             📅 <span style="letter-spacing: 0.5px; text-transform: uppercase;">${monthName}</span>
             &nbsp;—&nbsp;
             <span style="color: #38bdf8; font-weight: normal;">${groupTickets.length} Call(s) Pending</span>
@@ -626,10 +626,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <td style="font-family: monospace; font-weight: bold; color: #1e40af;">${t.ticket_id || ''}</td>
             <td style="font-weight: 600;">${t.date || ''}</td>
             <td style="font-weight: 600;">${t.username || ''}</td>
-            <td>${t.contact || ''}</td>
             <td>${t.location || ''}</td>
-            <td>${t.product || ''} ${t.model ? ' - ' + t.model : ''}</td>
-            <td style="max-width: 220px; word-wrap: break-word;">${t.problem || ''}</td>
+            <td>${t.product || ''}</td>
             <td style="font-weight: 500;">${t.engineer || ''}</td>
             <td style="text-align: center;">${statusBadge}</td>
             <td>${t.first_visit_date || 'N/A'}</td>
@@ -704,10 +702,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <th>Ticket ID</th>
                 <th>Call Date</th>
                 <th>Client Name</th>
-                <th>Contact</th>
                 <th>Location</th>
-                <th>Product / Model</th>
-                <th>Problem / Issue</th>
+                <th>Product</th>
                 <th>Engineer</th>
                 <th style="text-align: center;">Status</th>
                 <th>First Visit</th>
@@ -717,7 +713,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </tr>
             </thead>
             <tbody>
-              ${tableHtml.length > 0 ? tableHtml : '<tr><td colspan="14" style="text-align:center; padding:20px;">No Active Open or Hold Calls Found</td></tr>'}
+              ${tableHtml.length > 0 ? tableHtml : '<tr><td colspan="12" style="text-align:center; padding:20px;">No Active Open or Hold Calls Found</td></tr>'}
             </tbody>
           </table>
 

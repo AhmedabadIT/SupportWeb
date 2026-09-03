@@ -45,6 +45,7 @@ export interface Ticket {
   close_date: string;
   status: 'Open' | 'Hold' | 'Closed';
   engineer_remark: string;
+  remarks?: string;
   resolution_days?: number | null;
   created_at: string;
   updated_at: string;
