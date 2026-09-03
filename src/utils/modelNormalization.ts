@@ -226,3 +226,90 @@ export function isOptiplex7470Match(text: string): boolean {
   if (!text) return false;
   return getHardwareAliasSuggestion(text) !== null;
 }
+
+/**
+ * Robustly extracts the hardware serial number, service tag, or asset tag from WhatsApp support messages.
+ * Handles common abbreviations, typos, and formatting variants:
+ * - "Serial no : E78341F1N313961", "Serial No. : ...", "Serial no. : ..."
+ * - "Sr. No. : ...", "Sr No : ...", "Sr.no : ...", "Sr# : ..."
+ * - "Sl. No. : ...", "Sl No : ...", "Sl.no : ..."
+ * - "S/N : ...", "S.N. : ...", "SN : ...", "S.No : ...", "S No : ...", "S/No : ..."
+ * - "Serial Number : ...", "Serial Number - ...", "Serial : ..."
+ * - "Service Tag : ...", "Tag No : ...", "Asset Tag : ..."
+ * - "Machine Sr No : ...", "Printer Sr No : ...", "Device S/N : ..."
+ * - WhatsApp markdown formatting (e.g. *Serial no* : E78341F1N313961)
+ * - Multiline entries (where serial label is on line 1 and value is on line 2)
+ * - Standalone hardware patterns (e.g. Brother 15-char serial E78341F1N313961 or Dell 7-char service tag)
+ */
+export function extractSerialNumber(inputText: string): string {
+  if (!inputText || typeof inputText !== 'string') return '';
+  // Clean WhatsApp formatting markers like asterisks or tildes around field names
+  const text = inputText.replace(/[*~]/g, ' ').trim();
+  if (!text) return '';
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // 1. Line-by-line inspection
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Check if line contains a serial / service tag label
+    const labelMatch = line.match(
+      /(?:(?:Machine|Printer|Device|Hardware|Unit|M\/C|AIO|System|M\/c)\s*)?(?:Serial(?:\s*(?:number|num\.?|no\.?|#))?|Sr\.?\s*(?:number|num\.?|no\.?|#)?|Sl\.?\s*(?:number|num\.?|no\.?|#)?|S\/?N\.?|S\.N\.?|S\.No\.?|S\s*No\.?|S\/No\.?|Service\s*Tag|Asset\s*(?:tag|no\.?)?|Tag\s*(?:no\.?)?)\b\s*[:=–—#-]?\s*(.*)$/i
+    );
+
+    if (labelMatch) {
+      let candidate = (labelMatch[1] || '').trim();
+
+      // If candidate is empty on this line, check the next line
+      if (!candidate && i + 1 < lines.length) {
+        const nextLine = lines[i + 1].trim();
+        if (!/^(?:Problem|Contact|User|Location|Make|Model|Date|Phone|Mo|Dr|BO)\s*[:=-]/i.test(nextLine)) {
+          candidate = nextLine;
+        }
+      }
+
+      if (candidate) {
+        const tokenMatch = candidate.match(/^([A-Za-z0-9][A-Za-z0-9/._-]{2,35})/);
+        if (tokenMatch) {
+          const clean = tokenMatch[1].replace(/^[#"'\s]+|[.,;:"'\s]+$/g, '').trim();
+          if (
+            clean &&
+            !/^(problem|contact|user|username|location|make|model|date|time|yes|no|none|na|nil|null|undefined)$/i.test(clean)
+          ) {
+            return clean;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Full text regex fallback (handles single-line or unstructured texts)
+  const fullTextPatterns = [
+    /(?:(?:Machine|Printer|Device|Hardware|Unit|M\/C|AIO|System|M\/c)\s*)?(?:Serial(?:\s*(?:number|num\.?|no\.?|#))?|Sr\.?\s*(?:number|num\.?|no\.?|#)?|Sl\.?\s*(?:number|num\.?|no\.?|#)?|S\/?N\.?|S\.N\.?|S\.No\.?|S\s*No\.?|S\/No\.?|Service\s*Tag|Asset\s*(?:tag|no\.?)?|Tag\s*(?:no\.?)?)\s*[:=–—#-]?\s*([A-Za-z0-9][A-Za-z0-9/._-]{2,35})/i,
+    /(?:^|\s)(?:S\/N|SN|Sr|Sl|Serial)\s*[:=–—#-]\s*([A-Za-z0-9][A-Za-z0-9/._-]{2,35})/i
+  ];
+
+  for (const regex of fullTextPatterns) {
+    const m = text.match(regex);
+    if (m && m[1]) {
+      const clean = m[1].replace(/^[#"'\s]+|[.,;:"'\s]+$/g, '').trim();
+      if (
+        clean &&
+        !/^(problem|contact|user|username|location|make|model|date|time|yes|no|none|na|nil|null|undefined)$/i.test(clean)
+      ) {
+        return clean;
+      }
+    }
+  }
+
+  // 3. Known hardware serial format fallback:
+  // e.g. Brother 15-char serial: letter + 5 digits + alphanumeric (e.g. E78341F1N313961)
+  const brotherMatch = text.match(/\b([A-Z][0-9]{5}[A-Z0-9]{8,10})\b/i);
+  if (brotherMatch) {
+    return brotherMatch[1].toUpperCase();
+  }
+
+  return '';
+}
+

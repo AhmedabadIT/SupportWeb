@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ticket, Engineer } from '../types';
 import { calculateDaysBetweenVisitAndClose } from '../utils/dateUtils';
-import { normalizeModelString, getHardwareAliasSuggestion } from '../utils/modelNormalization';
+import { normalizeModelString, getHardwareAliasSuggestion, extractSerialNumber } from '../utils/modelNormalization';
 import { INITIAL_ENGINEERS } from '../utils/initialData';
 import { 
   Sparkles, 
@@ -235,14 +235,21 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
   };
 
   const parseMessageData = (inputText: string) => {
-    const text = (inputText || '').trim();
+    // Strip WhatsApp markdown formatting markers like asterisks * and tildes ~
+    const text = (inputText || '').replace(/[*~]/g, ' ').trim();
     if (!text) return null;
 
     // Extract Contact
     let contact = '';
-    const phoneMatch = text.match(/(?:Contact(?:\s*No|\s*Number)?|Phone(?:\s*No|\s*Number)?|Mobile(?:\s*No|\s*Number)?|Mo\b|Mob\b|Ph\b|No\b)\s*[:=-]?\s*([0-9+\s-]{10,14})/i);
+    const phoneMatch = text.match(/(?:Contact(?:\s*No\.?|\s*Number)?|Phone(?:\s*No\.?|\s*Number)?|Mobile(?:\s*No\.?|\s*Number)?|Cell(?:\s*No\.?|\s*Number)?|Con\b|Mo\b|Mob\b|Ph\b|No\.?)\s*[:=-]?\s*([+0-9\s-]{10,16})/i);
     if (phoneMatch) {
-      contact = phoneMatch[1].replace(/[\s-]/g, '');
+      let rawPhone = phoneMatch[1].replace(/[\s-]/g, '');
+      if (rawPhone.startsWith('+91') && rawPhone.length === 13) {
+        rawPhone = rawPhone.slice(3);
+      } else if (rawPhone.startsWith('91') && rawPhone.length === 12) {
+        rawPhone = rawPhone.slice(2);
+      }
+      contact = rawPhone;
     } else {
       const genericPhone = text.match(/(?:(?:\+91|91|0)?[\s-]?)?([6-9]\d{9})/);
       if (genericPhone) {
@@ -279,12 +286,8 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
       rawMake = makeMatch[1].trim();
     }
 
-    // Extract Serial Number
-    let serialNumber = '';
-    const snMatch = text.match(/(?:Serial\s*(?:no|num|number)?|S\/?N|SN|Sr\s*no|Tag\s*(?:no)?|Service\s*Tag)\s*[:=-]\s*([A-Za-z0-9_-]+)/i);
-    if (snMatch) {
-      serialNumber = snMatch[1].trim();
-    }
+    // Extract Serial Number using robust extractor
+    const serialNumber = extractSerialNumber(inputText);
 
     // Extract Problem Description
     let problem = '';
@@ -363,7 +366,11 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
     if (data.contact) setContact(data.contact);
     if (data.brand) setBrand(data.brand);
     if (data.model) setModel(data.model);
-    if (data.serial_number) setSerialNumber(data.serial_number);
+    
+    // Serial number with fallback to direct extractor
+    const resolvedSn = data.serial_number || extractSerialNumber(whatsappInput);
+    if (resolvedSn) setSerialNumber(resolvedSn);
+
     if (data.problem) setProblem(data.problem);
     if (data.product) setProduct(data.product);
     if (data.category) setCategory(data.category);
@@ -439,14 +446,17 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
   };
 
   const handleTextareaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    // Prevent default browser paste so text is never duplicated / pasted twice
+    e.preventDefault();
     const pasted = e.clipboardData.getData('text');
     if (pasted && pasted.trim()) {
-      setWhatsappInput(pasted);
-      const data = parseMessageData(pasted);
+      const cleanPasted = pasted.trim();
+      setWhatsappInput(cleanPasted);
+      const data = parseMessageData(cleanPasted);
       if (data) {
         setTimeout(() => {
           applyParsedData(data, '0.05');
-        }, 100);
+        }, 50);
       }
     }
   };
@@ -624,9 +634,21 @@ export const CreateTicketForm: React.FC<CreateTicketFormProps> = ({
       {/* Left Column: WhatsApp Message Parsing Area (Only in create mode & Admin mode) */}
       {!editingTicket && isAdmin && (
         <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800/60">
-            <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            <h2 className="text-md font-bold text-slate-800 dark:text-slate-200">WhatsApp AI Parsing</h2>
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <h2 className="text-md font-bold text-slate-800 dark:text-slate-200">WhatsApp AI Parsing</h2>
+            </div>
+            {whatsappInput && (
+              <button
+                type="button"
+                onClick={() => setWhatsappInput('')}
+                className="text-[11px] font-bold text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                title="Clear pasted message"
+              >
+                Clear
+              </button>
+            )}
           </div>
           
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">

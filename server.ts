@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { DBService } from "./src/db-service";
-import { normalizeModelString } from "./src/utils/modelNormalization";
+import { normalizeModelString, extractSerialNumber } from "./src/utils/modelNormalization";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
@@ -149,6 +149,22 @@ ${message}
       }
       if (normalizedHw.category) {
         parsedJSON.category = normalizedHw.category;
+      }
+
+      // Robust fallback for serial number extraction if AI missed it
+      if (!parsedJSON.serial_number || !parsedJSON.serial_number.trim()) {
+        parsedJSON.serial_number = extractSerialNumber(message);
+      }
+
+      // Clean phone number formatting (e.g. +91 8849973731 -> 8849973731)
+      if (parsedJSON.contact) {
+        let cleanPhone = String(parsedJSON.contact).replace(/[\s-]/g, '');
+        if (cleanPhone.startsWith('+91') && cleanPhone.length === 13) {
+          cleanPhone = cleanPhone.slice(3);
+        } else if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+          cleanPhone = cleanPhone.slice(2);
+        }
+        parsedJSON.contact = cleanPhone;
       }
 
       res.json(parsedJSON);

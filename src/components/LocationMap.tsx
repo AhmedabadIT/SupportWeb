@@ -63,14 +63,10 @@ export const LocationMap: React.FC<LocationMapProps> = ({
   const [isFetchingRoute, setIsFetchingRoute] = useState<boolean>(false);
   const [activeGeometry, setActiveGeometry] = useState<[number, number][]>([]);
 
-  // Live GPS Tracking & Simulation States
+  // Live GPS Tracking States
   const [isLiveGpsTracking, setIsLiveGpsTracking] = useState<boolean>(false);
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
   const [livePosition, setLivePosition] = useState<{ lat: number; lng: number } | null>(null);
-  const [simIndex, setSimIndex] = useState<number>(0);
-  const [simSpeed, setSimSpeed] = useState<number>(1);
   const watchIdRef = useRef<number | null>(null);
-  const simIntervalRef = useRef<any>(null);
 
   const hasStart = startCoords.lat !== 0 || startCoords.lng !== 0;
   const hasDest = destCoords.lat !== 0 || destCoords.lng !== 0;
@@ -357,7 +353,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
         return;
       }
       setIsLiveGpsTracking(true);
-      setIsSimulating(false);
 
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
@@ -373,49 +368,6 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     }
   };
 
-  // Simulated GPS Ride Along Path
-  const toggleSimulation = () => {
-    if (isSimulating) {
-      if (simIntervalRef.current) clearInterval(simIntervalRef.current);
-      setIsSimulating(false);
-      setLivePosition(null);
-    } else {
-      if (!activeGeometry || activeGeometry.length === 0) {
-        alert("Please set both Start and Destination points first to simulate driving path!");
-        return;
-      }
-      if (isLiveGpsTracking) {
-        toggleLiveGpsTracking();
-      }
-      setIsSimulating(true);
-      setSimIndex(0);
-      setLivePosition({ lat: activeGeometry[0][0], lng: activeGeometry[0][1] });
-    }
-  };
-
-  // Simulation Interval Loop
-  useEffect(() => {
-    if (!isSimulating || !activeGeometry || activeGeometry.length === 0) return;
-
-    simIntervalRef.current = setInterval(() => {
-      setSimIndex((prev) => {
-        const next = prev + 1;
-        if (next >= activeGeometry.length) {
-          clearInterval(simIntervalRef.current);
-          setIsSimulating(false);
-          return activeGeometry.length - 1;
-        }
-        const pt = activeGeometry[next];
-        setLivePosition({ lat: pt[0], lng: pt[1] });
-        return next;
-      });
-    }, 1200 / simSpeed);
-
-    return () => {
-      if (simIntervalRef.current) clearInterval(simIntervalRef.current);
-    };
-  }, [isSimulating, activeGeometry, simSpeed]);
-
   // Update Live Rider Marker on Leaflet
   useEffect(() => {
     const map = mapRef.current;
@@ -427,7 +379,7 @@ export const LocationMap: React.FC<LocationMapProps> = ({
     }
 
     if (livePosition) {
-      const label = isSimulating ? `Simulated Rider (Step ${simIndex + 1}/${activeGeometry.length})` : "Live Engineer GPS";
+      const label = "Live Engineer GPS";
       const marker = L.marker([livePosition.lat, livePosition.lng], {
         icon: createLiveRiderIcon(label),
         zIndexOffset: 1000
@@ -436,20 +388,17 @@ export const LocationMap: React.FC<LocationMapProps> = ({
       marker.bindPopup(`<b>${label}</b><br/>Lat: ${livePosition.lat}, Lng: ${livePosition.lng}`);
       liveGpsMarkerRef.current = marker;
 
-      if (isSimulating || isLiveGpsTracking) {
+      if (isLiveGpsTracking) {
         map.panTo([livePosition.lat, livePosition.lng]);
       }
     }
-  }, [livePosition, isSimulating, isLiveGpsTracking, simIndex, activeGeometry]);
+  }, [livePosition, isLiveGpsTracking]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
-      }
-      if (simIntervalRef.current) {
-        clearInterval(simIntervalRef.current);
       }
     };
   }, []);
@@ -491,50 +440,20 @@ export const LocationMap: React.FC<LocationMapProps> = ({
           </div>
         </div>
 
-        {/* Live GPS & Simulation Action Controls */}
+        {/* Live GPS Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
           {hasStart && hasDest && (
-            <>
-              <button
-                type="button"
-                onClick={toggleLiveGpsTracking}
-                className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                  isLiveGpsTracking
-                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm animate-pulse'
-                    : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-                }`}
-              >
-                <span>{isLiveGpsTracking ? '📡 Live GPS Active' : '📡 Track Live GPS'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleSimulation}
-                className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                  isSimulating
-                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
-                    : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-                }`}
-              >
-                <span>{isSimulating ? '⏸ Stop Sim' : '⚡ Simulate Live Ride'}</span>
-              </button>
-
-              {isSimulating && (
-                <div className="flex items-center gap-1 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-lg text-[10px] font-bold">
-                  <span>Speed:</span>
-                  {[1, 2, 5].map((spd) => (
-                    <button
-                      key={spd}
-                      type="button"
-                      onClick={() => setSimSpeed(spd)}
-                      className={`px-1.5 py-0.5 rounded cursor-pointer ${simSpeed === spd ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-400'}`}
-                    >
-                      {spd}x
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
+            <button
+              type="button"
+              onClick={toggleLiveGpsTracking}
+              className={`px-3 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                isLiveGpsTracking
+                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm animate-pulse'
+                  : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+              }`}
+            >
+              <span>{isLiveGpsTracking ? '📡 Live GPS Tracking Active' : '📡 Track Live GPS'}</span>
+            </button>
           )}
 
           {onGetGpsStart && (
@@ -626,16 +545,11 @@ export const LocationMap: React.FC<LocationMapProps> = ({
           <div className="absolute top-3 left-3 z-10 bg-indigo-950/90 backdrop-blur-md text-white p-2.5 rounded-xl border border-indigo-700/80 shadow-xl text-xs space-y-1">
             <div className="flex items-center gap-2 font-bold text-emerald-400 text-[11px]">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>{isSimulating ? '⚡ SIMULATED GPS EN-ROUTE' : '📡 LIVE GPS TRACKING ACTIVE'}</span>
+              <span>📡 REAL-TIME LIVE GPS ACTIVE</span>
             </div>
             <div className="text-[11px] font-mono text-slate-200">
               Pos: {livePosition.lat.toFixed(5)}, {livePosition.lng.toFixed(5)}
             </div>
-            {isSimulating && activeGeometry.length > 0 && (
-              <div className="text-[10px] text-amber-300 font-bold">
-                Route Progress: {Math.round(((simIndex + 1) / activeGeometry.length) * 100)}% ({simIndex + 1}/{activeGeometry.length} waypoints)
-              </div>
-            )}
           </div>
         )}
 

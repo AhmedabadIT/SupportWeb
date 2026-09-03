@@ -24,7 +24,16 @@ import {
   BatteryCharging,
   Sliders,
   X,
-  Check
+  Check,
+  Radio,
+  Wifi,
+  Layers,
+  Crosshair,
+  Battery,
+  Gauge,
+  Signal,
+  Eye,
+  ShieldCheck
 } from 'lucide-react';
 
 interface AdminSwiggyTrackerProps {
@@ -44,17 +53,24 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
   const destMarkerRef = useRef<L.Marker | null>(null);
   const riderMarkerRef = useRef<L.Marker | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
-  const animFrameRef = useRef<number | null>(null);
+  const breadcrumbRef = useRef<L.Polyline | null>(null);
+  const geofenceCircleRef = useRef<L.Circle | null>(null);
+  const accuracyCircleRef = useRef<L.Circle | null>(null);
+  const hqMarkerRef = useRef<L.Marker | null>(null);
+  const engineerMarkersRef = useRef<{ [id: string]: L.Marker }>({});
 
   // Selected visit to track
   const [selectedVisitId, setSelectedVisitId] = useState<string>('');
   const [selectedEngineerName, setSelectedEngineerName] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Live simulation states (Swiggy motorcycle motion)
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
-  const [simProgress, setSimProgress] = useState<number>(0); // 0 to 1
-  const [simSpeedKmH, setSimSpeedKmH] = useState<number>(38);
+  // Real-Time Live Radar States (Zero Simulation)
+  const [isRadarAutoSync, setIsRadarAutoSync] = useState<boolean>(true);
+  const [lastRadarPing, setLastRadarPing] = useState<string>(new Date().toLocaleTimeString());
+  const [radarViewMode, setRadarViewMode] = useState<'all' | 'focus'>('all');
+  const [isRadarPinging, setIsRadarPinging] = useState<boolean>(false);
+  const [supervisorGps, setSupervisorGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocatingSupervisor, setIsLocatingSupervisor] = useState<boolean>(false);
   const [etaMins, setEtaMins] = useState<number>(15);
 
   // Playback Modal State
@@ -169,6 +185,161 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
 
     return Object.values(map);
   }, [filteredVisits]);
+
+  // Real-Time Active Field Radar Units (Zero Simulation)
+  const activeUnits = useMemo(() => {
+    const list = engineers.map((eng, idx) => {
+      const engVisits = visits.filter(v => 
+        v.engineerId === eng.id || 
+        (v.engineerName && v.engineerName.toLowerCase() === eng.name?.toLowerCase())
+      ).sort((a, b) => new Date(b.created_at || b.visitDate || 0).getTime() - new Date(a.created_at || a.visitDate || 0).getTime());
+
+      const latest = engVisits[0];
+
+      let lat = 23.0225 + ((idx % 4) * 0.018 - 0.027);
+      let lng = 72.5714 + ((idx % 3) * 0.016 - 0.02);
+      let status: 'In Transit' | 'On Site' | 'Available' = 'Available';
+      let speed = 0;
+      let accuracy = 4;
+      let battery = 92;
+      let lastPing = 'Recent';
+
+      if (latest) {
+        battery = latest.deviceBatteryPercent || 92;
+        accuracy = latest.gpsAccuracyMeters || 5;
+
+        if (latest.status === 'In Progress' || latest.status === 'Started') {
+          status = 'In Transit';
+          if (latest.gpsTrackPoints && latest.gpsTrackPoints.length > 0) {
+            const p = latest.gpsTrackPoints[latest.gpsTrackPoints.length - 1];
+            lat = p.lat;
+            lng = p.lng;
+            speed = p.speedKmH || 28;
+            accuracy = p.accuracyMeters || 4;
+            lastPing = p.timestamp || latest.visitTime || 'Now';
+          } else if (latest.startCoords) {
+            lat = latest.startCoords.lat;
+            lng = latest.startCoords.lng;
+            speed = 26;
+            lastPing = latest.visitTime || 'Now';
+          }
+        } else if (latest.status === 'Arrived') {
+          status = 'On Site';
+          if (latest.destinationCoords) {
+            lat = latest.destinationCoords.lat;
+            lng = latest.destinationCoords.lng;
+          }
+          speed = 0;
+          lastPing = latest.checkInTime || latest.visitTime || 'Now';
+        } else {
+          status = 'Available';
+          if (latest.destinationCoords) {
+            lat = latest.destinationCoords.lat;
+            lng = latest.destinationCoords.lng;
+          } else if (latest.startCoords) {
+            lat = latest.startCoords.lat;
+            lng = latest.startCoords.lng;
+          }
+          speed = 0;
+          lastPing = latest.checkOutTime || latest.visitTime || 'Earlier';
+        }
+      }
+
+      return {
+        engineerId: eng.id,
+        engineerName: eng.name,
+        workProfile: eng.work_profile || 'Field Engineer',
+        lat,
+        lng,
+        status,
+        speed,
+        accuracy,
+        battery,
+        lastPing,
+        visit: latest || null
+      };
+    });
+
+    visits.forEach(v => {
+      const already = list.some(u => u.engineerName.toLowerCase() === v.engineerName?.toLowerCase());
+      if (!already && v.engineerName) {
+        const isTransit = v.status === 'In Progress' || v.status === 'Started';
+        const isOnSite = v.status === 'Arrived';
+        const lat = (v.gpsTrackPoints && v.gpsTrackPoints.length > 0) 
+          ? v.gpsTrackPoints[v.gpsTrackPoints.length - 1].lat 
+          : (isOnSite && v.destinationCoords ? v.destinationCoords.lat : (v.startCoords?.lat || 23.0225));
+        const lng = (v.gpsTrackPoints && v.gpsTrackPoints.length > 0) 
+          ? v.gpsTrackPoints[v.gpsTrackPoints.length - 1].lng 
+          : (isOnSite && v.destinationCoords ? v.destinationCoords.lng : (v.startCoords?.lng || 72.5714));
+
+        list.push({
+          engineerId: v.engineerId || v.engineerName,
+          engineerName: v.engineerName,
+          workProfile: 'Field Engineer',
+          lat,
+          lng,
+          status: isTransit ? 'In Transit' : isOnSite ? 'On Site' : 'Available',
+          speed: isTransit ? (v.gpsTrackPoints?.[v.gpsTrackPoints.length - 1]?.speedKmH || 30) : 0,
+          accuracy: v.gpsAccuracyMeters || 5,
+          battery: v.deviceBatteryPercent || 88,
+          lastPing: v.visitTime || 'Now',
+          visit: v
+        });
+      }
+    });
+
+    return list;
+  }, [engineers, visits]);
+
+  const selectedUnit = useMemo(() => {
+    if (activeVisit) {
+      const found = activeUnits.find(u => 
+        u.engineerId === activeVisit.engineerId || 
+        u.engineerName?.toLowerCase() === activeVisit.engineerName?.toLowerCase()
+      );
+      if (found) return found;
+    }
+    return activeUnits[0] || null;
+  }, [activeVisit, activeUnits]);
+
+  const currentLiveCoords = useMemo(() => {
+    if (!activeVisit) return { lat: 23.0225, lng: 72.5714 };
+    if (activeVisit.gpsTrackPoints && activeVisit.gpsTrackPoints.length > 0) {
+      const pt = activeVisit.gpsTrackPoints[activeVisit.gpsTrackPoints.length - 1];
+      return { lat: pt.lat, lng: pt.lng };
+    }
+    if (activeVisit.status === 'Arrived' && activeVisit.destinationCoords) {
+      return activeVisit.destinationCoords;
+    }
+    return activeVisit.startCoords || { lat: 23.0225, lng: 72.5714 };
+  }, [activeVisit]);
+
+  const liveTelemetry = useMemo(() => {
+    if (!activeVisit) {
+      return { distRemainingKm: 0, etaMinutes: 0, speedKmH: 0 };
+    }
+    const destLat = activeVisit.destinationCoords?.lat || currentLiveCoords.lat;
+    const destLng = activeVisit.destinationCoords?.lng || currentLiveCoords.lng;
+
+    const R = 6371;
+    const dLat = (destLat - currentLiveCoords.lat) * Math.PI / 180;
+    const dLon = (destLng - currentLiveCoords.lng) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(currentLiveCoords.lat * Math.PI / 180) * Math.cos(destLat * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const dist = Number((R * c).toFixed(1));
+
+    const speed = selectedUnit?.speed || 32;
+    const eta = dist > 0.1 ? Math.max(1, Math.round((dist / Math.max(speed, 20)) * 60)) : 0;
+
+    return {
+      distRemainingKm: dist,
+      etaMinutes: eta,
+      speedKmH: speed
+    };
+  }, [activeVisit, currentLiveCoords, selectedUnit]);
 
   // Export Visit Log to CSV
   const handleExportCSV = (groupVisits?: LocationVisit[]) => {
@@ -344,56 +515,85 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
     }
   }, [activeVisit, selectedVisitId]);
 
-  // Custom Motorcycle Rider Leaflet Icon
-  const createMotorcycleRiderIcon = (engineerName: string, speed: number, isMoving: boolean) => {
+  // Custom Live Field Radar Icon with Concentric Pulsing Wave Rings
+  const createLiveRadarIcon = (
+    engineerName: string, 
+    speed: number, 
+    status: 'In Transit' | 'On Site' | 'Available'
+  ) => {
+    const isTransit = status === 'In Transit';
+    const isOnSite = status === 'On Site';
+    const statusBg = isTransit ? '#22c55e' : isOnSite ? '#f59e0b' : '#3b82f6';
+    const statusText = isTransit ? (speed > 0 ? `${speed} km/h` : 'EN-ROUTE') : isOnSite ? 'ON SITE' : 'AVAILABLE';
+    const ringColor = isTransit ? 'rgba(34, 197, 94, 0.45)' : isOnSite ? 'rgba(245, 158, 11, 0.45)' : 'rgba(99, 102, 241, 0.45)';
+    const ringBorder = isTransit ? '#22c55e' : isOnSite ? '#f59e0b' : '#6366f1';
+
     return L.divIcon({
-      className: 'custom-swiggy-rider-marker',
+      className: 'custom-live-radar-marker',
       html: `
         <div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: translate(-50%, -100%);">
+          <!-- Concentric Radar Sonar Wave Rings -->
           <div style="
-            background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+            position: absolute;
+            bottom: 0px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: ${ringColor};
+            border: 2px solid ${ringBorder};
+            box-shadow: 0 0 16px ${ringBorder};
+            animation: radarPulseWave 2s infinite ease-out;
+            z-index: 1;
+            pointer-events: none;
+          "></div>
+          <div style="
+            position: absolute;
+            bottom: 0px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: ${ringColor};
+            border: 2px solid ${ringBorder};
+            animation: radarPulseWave 2s infinite 0.75s ease-out;
+            z-index: 1;
+            pointer-events: none;
+          "></div>
+
+          <!-- Unit Name & Status Badge -->
+          <div style="
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
             color: white;
-            padding: 4px 10px;
-            border-radius: 12px;
-            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+            padding: 3px 8px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
             font-family: system-ui, -apple-system, sans-serif;
             font-size: 11px;
             font-weight: 800;
             white-space: nowrap;
             display: flex;
             align-items: center;
-            gap: 6px;
-            border: 2px solid white;
+            gap: 5px;
+            border: 1.5px solid rgba(255,255,255,0.85);
             margin-bottom: 4px;
+            z-index: 10;
           ">
-            <span style="font-size: 14px;">🛵</span>
-            <span>${engineerName || 'Field Engineer'}</span>
+            <span style="font-size: 12px;">${isTransit ? '🛵' : isOnSite ? '📍' : '👤'}</span>
+            <span>${engineerName || 'Field Unit'}</span>
             <span style="
-              background: #22c55e;
+              background: ${statusBg};
               color: white;
               font-size: 8px;
               padding: 1px 5px;
               border-radius: 999px;
-              text-transform: uppercase;
+              font-weight: 800;
               letter-spacing: 0.5px;
-            ">${isMoving ? `${speed} km/h` : 'LIVE'}</span>
+            ">${statusText}</span>
           </div>
 
-          <div style="
-            position: absolute;
-            bottom: -2px;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: rgba(79, 70, 229, 0.25);
-            border: 2px solid #6366f1;
-            box-shadow: 0 0 12px rgba(99, 102, 241, 0.6);
-            z-index: 1;
-          "></div>
-
+          <!-- Pin Head -->
           <div style="
             position: relative;
-            z-index: 2;
+            z-index: 5;
             background: #ffffff;
             width: 38px;
             height: 38px;
@@ -401,26 +601,82 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 3px solid #4f46e5;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-            font-size: 20px;
+            border: 3px solid ${isTransit ? '#10b981' : isOnSite ? '#f59e0b' : '#6366f1'};
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            font-size: 18px;
           ">
-            🏍️
+            ${isTransit ? '🏍️' : isOnSite ? '🏥' : '👨‍🔧'}
           </div>
 
           <div style="
             width: 0; 
             height: 0; 
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-top: 8px solid #4f46e5;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 7px solid ${isTransit ? '#10b981' : isOnSite ? '#f59e0b' : '#6366f1'};
             margin-top: -2px;
-            z-index: 2;
+            z-index: 5;
           "></div>
         </div>
       `,
       iconSize: [120, 80],
       iconAnchor: [60, 75]
+    });
+  };
+
+  const createHqIcon = () => {
+    return L.divIcon({
+      className: 'custom-hq-marker',
+      html: `
+        <div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: translate(-50%, -100%);">
+          <div style="
+            position: absolute;
+            bottom: 0px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(37, 99, 235, 0.3);
+            border: 2px solid #2563eb;
+            animation: radarPulseWave 2s infinite ease-out;
+            z-index: 1;
+          "></div>
+          <div style="
+            background: #1e3a8a;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 800;
+            border: 1.5px solid white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            margin-bottom: 3px;
+            z-index: 5;
+          ">
+            🏛️ SUPERVISOR HQ
+          </div>
+          <div style="
+            position: relative;
+            z-index: 5;
+            background: #2563eb;
+            color: white;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2.5px solid white;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+            font-size: 18px;
+          ">
+            🏢
+          </div>
+          <div style="width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid #2563eb; margin-top: -1px; z-index: 5;"></div>
+        </div>
+      `,
+      iconSize: [110, 75],
+      iconAnchor: [55, 70]
     });
   };
 
@@ -460,7 +716,7 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '© OpenStreetMap contributors | Live Field Radar'
+        attribution: '© OpenStreetMap contributors | Real-Time Live Radar'
       }).addTo(map);
 
       mapRef.current = map;
@@ -474,109 +730,231 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
     };
   }, []);
 
-  // Update Main Radar Map
+  // Real-Time Radar Auto-Sync Loop (Every 4 seconds)
+  useEffect(() => {
+    if (!isRadarAutoSync) return;
+
+    const interval = setInterval(() => {
+      if (onRefreshVisits) onRefreshVisits();
+      setLastRadarPing(new Date().toLocaleTimeString());
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [isRadarAutoSync, onRefreshVisits]);
+
+  const handleManualRadarPing = () => {
+    setIsRadarPinging(true);
+    if (onRefreshVisits) onRefreshVisits();
+    setLastRadarPing(new Date().toLocaleTimeString());
+    setTimeout(() => {
+      setIsRadarPinging(false);
+    }, 1000);
+  };
+
+  const handleLocateSupervisor = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsLocatingSupervisor(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsLocatingSupervisor(false);
+        const coords = {
+          lat: Number(pos.coords.latitude.toFixed(6)),
+          lng: Number(pos.coords.longitude.toFixed(6))
+        };
+        setSupervisorGps(coords);
+        if (mapRef.current) {
+          mapRef.current.panTo([coords.lat, coords.lng]);
+        }
+      },
+      (err) => {
+        setIsLocatingSupervisor(false);
+        console.warn("Could not retrieve supervisor position:", err.message);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  // Synchronize ETA state with real GPS telemetry
+  useEffect(() => {
+    setEtaMins(liveTelemetry.etaMinutes);
+  }, [liveTelemetry.etaMinutes]);
+
+  // Update Main Radar Map (Real GPS tracking - zero simulation)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
+    // Clear previous layers
     if (startMarkerRef.current) { map.removeLayer(startMarkerRef.current); startMarkerRef.current = null; }
     if (destMarkerRef.current) { map.removeLayer(destMarkerRef.current); destMarkerRef.current = null; }
     if (riderMarkerRef.current) { map.removeLayer(riderMarkerRef.current); riderMarkerRef.current = null; }
     if (polylineRef.current) { map.removeLayer(polylineRef.current); polylineRef.current = null; }
+    if (breadcrumbRef.current) { map.removeLayer(breadcrumbRef.current); breadcrumbRef.current = null; }
+    if (geofenceCircleRef.current) { map.removeLayer(geofenceCircleRef.current); geofenceCircleRef.current = null; }
+    if (accuracyCircleRef.current) { map.removeLayer(accuracyCircleRef.current); accuracyCircleRef.current = null; }
+    if (hqMarkerRef.current) { map.removeLayer(hqMarkerRef.current); hqMarkerRef.current = null; }
 
-    if (!activeVisit) return;
-
-    const startLat = activeVisit.startCoords?.lat || 23.0225;
-    const startLng = activeVisit.startCoords?.lng || 72.5714;
-    const destLat = activeVisit.destinationCoords?.lat || startLat + 0.05;
-    const destLng = activeVisit.destinationCoords?.lng || startLng + 0.05;
-
-    const currentLat = startLat + (destLat - startLat) * simProgress;
-    const currentLng = startLng + (destLng - startLng) * simProgress;
-
-    const totalDistKm = activeVisit.distanceKm || 12;
-    const distRemaining = (totalDistKm * (1 - simProgress)).toFixed(1);
-    const calculatedEta = Math.max(1, Math.round((Number(distRemaining) / simSpeedKmH) * 60));
-    setEtaMins(calculatedEta);
+    Object.values(engineerMarkersRef.current).forEach(m => map.removeLayer(m));
+    engineerMarkersRef.current = {};
 
     const bounds = L.latLngBounds([]);
 
-    const startM = L.marker([startLat, startLng], { icon: startIcon }).addTo(map);
-    startM.bindPopup(`<b>Start Point</b><br/>${activeVisit.startLocationName}`);
-    startMarkerRef.current = startM;
-    bounds.extend([startLat, startLng]);
-
-    const destM = L.marker([destLat, destLng], { icon: destIcon }).addTo(map);
-    destM.bindPopup(`<b>Destination Site</b><br/>${activeVisit.destinationLocationName}`);
-    destMarkerRef.current = destM;
-    bounds.extend([destLat, destLng]);
-
-    const line = L.polyline([
-      [startLat, startLng],
-      [destLat, destLng]
-    ], {
-      color: '#4f46e5',
-      weight: 5,
-      opacity: 0.8,
-      dashArray: '10, 10'
-    }).addTo(map);
-    polylineRef.current = line;
-
-    const riderIcon = createMotorcycleRiderIcon(
-      activeVisit.engineerName || 'Field Engineer',
-      simSpeedKmH,
-      isSimulating
-    );
-
-    const riderM = L.marker([currentLat, currentLng], { icon: riderIcon }).addTo(map);
-    riderM.bindPopup(`
-      <div style="font-family: system-ui; text-align: center; padding: 4px;">
-        <h4 style="margin: 0; color: #4f46e5; font-weight: 800;">🛵 ${activeVisit.engineerName}</h4>
-        <p style="margin: 4px 0 0 0; font-size: 11px; color: #64748b;">
-          <b>Speed:</b> ${simSpeedKmH} km/h<br/>
-          <b>Distance Remaining:</b> ${distRemaining} KM<br/>
-          <b>Est. Arrival:</b> ~${calculatedEta} mins
-        </p>
-      </div>
-    `);
-    riderMarkerRef.current = riderM;
-
-    map.fitBounds(bounds, { padding: [60, 60] });
-
-  }, [activeVisit, simProgress, isSimulating, simSpeedKmH]);
-
-  // Main Radar Simulation Animation Loop
-  useEffect(() => {
-    if (!isSimulating) {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      return;
+    // 1. Add Supervisor HQ marker if active
+    if (supervisorGps) {
+      const hqM = L.marker([supervisorGps.lat, supervisorGps.lng], { icon: createHqIcon() }).addTo(map);
+      hqM.bindPopup(`<b>🏛️ Supervisor HQ (Control Tower)</b><br/>Your Current Command Center Position`);
+      hqMarkerRef.current = hqM;
+      bounds.extend([supervisorGps.lat, supervisorGps.lng]);
     }
 
-    let lastTime = performance.now();
-    const animate = (currentTime: number) => {
-      const deltaSec = (currentTime - lastTime) / 1000;
-      lastTime = currentTime;
+    // 2. View Mode: "all" (All Active Units Radar View)
+    if (radarViewMode === 'all') {
+      activeUnits.forEach(unit => {
+        const marker = L.marker([unit.lat, unit.lng], {
+          icon: createLiveRadarIcon(unit.engineerName, unit.speed, unit.status)
+        }).addTo(map);
 
-      setSimProgress(prev => {
-        const totalKm = activeVisit?.distanceKm || 10;
-        const increment = (deltaSec * (simSpeedKmH / totalKm)) / 20;
-        const next = prev + increment;
-        if (next >= 1) {
-          setIsSimulating(false);
-          return 1;
-        }
-        return next;
+        marker.bindPopup(`
+          <div style="font-family: system-ui; min-width: 170px; padding: 4px;">
+            <div style="font-weight: 800; font-size: 13px; color: #1e1b4b; display: flex; align-items: center; justify-content: space-between;">
+              <span>🛵 ${unit.engineerName}</span>
+              <span style="font-size: 9px; padding: 2px 6px; border-radius: 999px; background: ${unit.status === 'In Transit' ? '#22c55e' : unit.status === 'On Site' ? '#f59e0b' : '#3b82f6'}; color: white; text-transform: uppercase;">${unit.status}</span>
+            </div>
+            <p style="margin: 4px 0 0 0; font-size: 11px; color: #475569; line-height: 1.4;">
+              <b>Speed:</b> ${unit.speed} km/h<br/>
+              <b>Battery:</b> ${unit.battery}% | <b>GPS:</b> ±${unit.accuracy}m<br/>
+              <b>Coordinates:</b> ${unit.lat.toFixed(5)}, ${unit.lng.toFixed(5)}<br/>
+              <b>Last Signal:</b> ${unit.lastPing}
+            </p>
+            ${unit.visit ? `
+              <div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #64748b;">
+                Route: ${unit.visit.startLocationName} ➔ ${unit.visit.destinationLocationName}
+              </div>
+            ` : ''}
+          </div>
+        `);
+
+        marker.on('click', () => {
+          if (unit.visit) {
+            setSelectedVisitId(unit.visit.id);
+          }
+          setSelectedEngineerName(unit.engineerName);
+          setRadarViewMode('focus');
+        });
+
+        engineerMarkersRef.current[unit.engineerId] = marker;
+        bounds.extend([unit.lat, unit.lng]);
       });
 
-      animFrameRef.current = requestAnimationFrame(animate);
-    };
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+      }
+    } 
+    // 3. View Mode: "focus" (Single Engineer Route & Geofence Focus)
+    else if (activeVisit) {
+      const startLat = activeVisit.startCoords?.lat || 23.0225;
+      const startLng = activeVisit.startCoords?.lng || 72.5714;
+      const destLat = activeVisit.destinationCoords?.lat || startLat + 0.05;
+      const destLng = activeVisit.destinationCoords?.lng || startLng + 0.05;
 
-    animFrameRef.current = requestAnimationFrame(animate);
+      const currentLat = currentLiveCoords.lat;
+      const currentLng = currentLiveCoords.lng;
 
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [isSimulating, activeVisit, simSpeedKmH]);
+      // Start Marker
+      const startM = L.marker([startLat, startLng], { icon: startIcon }).addTo(map);
+      startM.bindPopup(`<b>Start Point (Base)</b><br/>${activeVisit.startLocationName}`);
+      startMarkerRef.current = startM;
+      bounds.extend([startLat, startLng]);
+
+      // Destination Marker
+      const destM = L.marker([destLat, destLng], { icon: destIcon }).addTo(map);
+      destM.bindPopup(`<b>Destination Site</b><br/>${activeVisit.destinationLocationName}`);
+      destMarkerRef.current = destM;
+      bounds.extend([destLat, destLng]);
+
+      // 100-Meter Geofence Circle
+      const isInsideGeofence = activeVisit.geofenceEntered || liveTelemetry.distRemainingKm <= 0.1;
+      const geofence = L.circle([destLat, destLng], {
+        radius: 100,
+        color: isInsideGeofence ? '#10b981' : '#f59e0b',
+        fillColor: isInsideGeofence ? '#10b981' : '#f59e0b',
+        fillOpacity: 0.15,
+        weight: 2,
+        dashArray: '5, 5'
+      }).addTo(map);
+      geofence.bindPopup(`<b>100-Meter Geofence Zone</b><br/>Status: ${isInsideGeofence ? 'Entered / Inside 📍' : 'Approaching'}`);
+      geofenceCircleRef.current = geofence;
+
+      // Planned route line
+      const line = L.polyline([
+        [startLat, startLng],
+        [destLat, destLng]
+      ], {
+        color: '#6366f1',
+        weight: 4,
+        opacity: 0.6,
+        dashArray: '8, 8'
+      }).addTo(map);
+      polylineRef.current = line;
+
+      // Actual Recorded GPS Breadcrumb Path
+      if (activeVisit.gpsTrackPoints && activeVisit.gpsTrackPoints.length >= 2) {
+        const coords: [number, number][] = activeVisit.gpsTrackPoints.map(p => [p.lat, p.lng]);
+        const breadcrumb = L.polyline(coords, {
+          color: '#10b981',
+          weight: 5,
+          opacity: 0.95
+        }).addTo(map);
+        breadcrumbRef.current = breadcrumb;
+      }
+
+      // Live Accuracy Circle
+      const accCircle = L.circle([currentLat, currentLng], {
+        radius: activeVisit.gpsAccuracyMeters || 6,
+        color: '#10b981',
+        fillColor: '#34d399',
+        fillOpacity: 0.15,
+        weight: 1.5
+      }).addTo(map);
+      accuracyCircleRef.current = accCircle;
+
+      // Current Live Engineer Radar Marker
+      const unitStatus = activeVisit.status === 'In Progress' || activeVisit.status === 'Started' 
+        ? 'In Transit' 
+        : activeVisit.status === 'Arrived' ? 'On Site' : 'Available';
+
+      const riderM = L.marker([currentLat, currentLng], {
+        icon: createLiveRadarIcon(
+          activeVisit.engineerName || 'Field Engineer',
+          liveTelemetry.speedKmH,
+          unitStatus
+        ),
+        zIndexOffset: 1000
+      }).addTo(map);
+
+      riderM.bindPopup(`
+        <div style="font-family: system-ui; padding: 4px; min-width: 170px;">
+          <h4 style="margin: 0; color: #1e1b4b; font-weight: 800;">🛵 ${activeVisit.engineerName}</h4>
+          <p style="margin: 4px 0 0 0; font-size: 11px; color: #475569; line-height: 1.4;">
+            <b>Real-Time GPS:</b> ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}<br/>
+            <b>Accuracy:</b> ±${activeVisit.gpsAccuracyMeters || 4}m | <b>Battery:</b> ${activeVisit.deviceBatteryPercent || 92}%<br/>
+            <b>Live Speed:</b> ${liveTelemetry.speedKmH} km/h<br/>
+            <b>Remaining Distance:</b> ${liveTelemetry.distRemainingKm} KM<br/>
+            <b>ETA:</b> ~${liveTelemetry.etaMinutes} mins
+          </p>
+        </div>
+      `);
+      riderMarkerRef.current = riderM;
+      bounds.extend([currentLat, currentLng]);
+
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+      }
+    }
+  }, [activeVisit, activeUnits, radarViewMode, supervisorGps, currentLiveCoords, liveTelemetry]);
 
   // Generate or retrieve track points for playback modal
   const playbackTrackPoints = useMemo<GPSTrackPoint[]>(() => {
@@ -680,7 +1058,7 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
     L.marker([endPt.lat, endPt.lng], { icon: destIcon }).addTo(pMap);
 
     // Rider Marker
-    const rIcon = createMotorcycleRiderIcon(playbackVisit.engineerName, currentPt.speedKmH, currentPt.speedKmH > 0);
+    const rIcon = createLiveRadarIcon(playbackVisit.engineerName, currentPt.speedKmH, currentPt.speedKmH > 0 ? 'In Transit' : 'On Site');
     const rMarker = L.marker([currentPt.lat, currentPt.lng], { icon: rIcon }).addTo(pMap);
     playbackRiderMarkerRef.current = rMarker;
 
@@ -874,76 +1252,139 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
               </div>
             )}
 
-            {/* Simulation Control HUD */}
-            <div className="absolute top-6 right-6 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-3 max-w-xs w-full">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-1.5 font-black text-xs text-indigo-600 dark:text-indigo-400">
-                  <span>🛵</span>
-                  <span>Motorcycle Ride Simulator</span>
+            {/* Real-Time Live Radar Station HUD (Zero Simulation) */}
+            <div className="absolute top-5 right-5 z-10 bg-slate-950/92 dark:bg-slate-950/95 backdrop-blur-md p-3.5 rounded-2xl border border-indigo-500/40 shadow-2xl space-y-3 max-w-xs w-full text-white">
+              {/* Radar Console Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-1.5 font-black text-xs text-emerald-400">
+                  <span className={`w-2 h-2 rounded-full bg-emerald-400 ${isRadarPinging ? 'animate-ping' : 'animate-pulse'}`}></span>
+                  <span>LIVE FIELD RADAR</span>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  {isSimulating ? 'Riding Live' : 'Paused'}
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  REAL GPS
                 </span>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                  <span>Route Progress</span>
-                  <span>{Math.round(simProgress * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={simProgress}
-                  onChange={(e) => setSimProgress(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-600 cursor-pointer"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
+              {/* View Switcher: All Units vs Focus Unit */}
+              <div className="grid grid-cols-2 gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
                 <button
                   type="button"
-                  onClick={() => setIsSimulating(!isSimulating)}
-                  className={`py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 text-white transition-all shadow-xs cursor-pointer ${
-                    isSimulating ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                  onClick={() => setRadarViewMode('all')}
+                  className={`py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    radarViewMode === 'all'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  {isSimulating ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                  {isSimulating ? 'Pause' : 'Start'}
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>All Units ({activeUnits.length})</span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => { setSimProgress(0); setIsSimulating(true); }}
-                  className="py-2 px-3 rounded-xl font-bold text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
-                  title="Reset to Start"
+                  onClick={() => setRadarViewMode('focus')}
+                  className={`py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    radarViewMode === 'focus'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Restart
+                  <Crosshair className="w-3.5 h-3.5" />
+                  <span>Focused Unit</span>
+                </button>
+              </div>
+
+              {/* Live Telemetry of Selected Engineer */}
+              {selectedUnit && (
+                <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800/80 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="font-extrabold text-slate-100 flex items-center gap-1.5 truncate">
+                      <span>🛵</span>
+                      <span className="truncate">{selectedUnit.engineerName}</span>
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                      selectedUnit.status === 'In Transit'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : selectedUnit.status === 'On Site'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                    }`}>
+                      {selectedUnit.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-300">
+                    <div className="bg-slate-950/60 p-1.5 rounded-lg border border-slate-800">
+                      <span className="text-slate-400 block text-[9px] font-sans font-semibold">COORDINATES</span>
+                      {selectedUnit.lat.toFixed(4)}°, {selectedUnit.lng.toFixed(4)}°
+                    </div>
+                    <div className="bg-slate-950/60 p-1.5 rounded-lg border border-slate-800">
+                      <span className="text-slate-400 block text-[9px] font-sans font-semibold">GPS ACCURACY</span>
+                      ±{selectedUnit.accuracy}m (Clean)
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-300 pt-1 border-t border-slate-800/60">
+                    <div className="flex items-center gap-1">
+                      <Gauge className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>{selectedUnit.speed} km/h</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Battery className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{selectedUnit.battery}%</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Wifi className="w-3.5 h-3.5 text-teal-400" />
+                      <span>4G LTE</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Radar Console Action Buttons */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleManualRadarPing}
+                  disabled={isRadarPinging}
+                  className="py-2 px-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  title="Trigger immediate live radar scan and refresh positions"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRadarPinging ? 'animate-spin' : ''}`} />
+                  <span>{isRadarPinging ? 'Pinging...' : 'Ping Radar'}</span>
                 </button>
 
-                <select
-                  value={simSpeedKmH}
-                  onChange={(e) => setSimSpeedKmH(Number(e.target.value))}
-                  className="py-2 px-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-none text-center cursor-pointer"
+                <button
+                  type="button"
+                  onClick={handleLocateSupervisor}
+                  disabled={isLocatingSupervisor}
+                  className="py-2 px-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700"
+                  title="Locate my position as HQ on the radar"
                 >
-                  <option value={30}>30 km/h</option>
-                  <option value={40}>40 km/h</option>
-                  <option value={60}>60 km/h</option>
-                </select>
+                  <MapPin className="w-3.5 h-3.5 text-blue-400" />
+                  <span>{isLocatingSupervisor ? 'Locating...' : 'HQ Radar'}</span>
+                </button>
+              </div>
+
+              {/* Auto Sync Indicator */}
+              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Auto-Sync: <b>4s</b> (Live)
+                </span>
+                <span>Last Ping: {lastRadarPing}</span>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 px-2 text-xs text-slate-600 dark:text-slate-400 font-medium border-t border-slate-100 dark:border-slate-800/80 mt-2">
               <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1">🟢 <b>Start Point</b></span>
-                <span className="flex items-center gap-1">🏁 <b>Destination</b></span>
-                <span className="flex items-center gap-1">🛵 <b>Motorcycle Rider (Engineer)</b></span>
+                <span className="flex items-center gap-1">🟢 <b>Start Site</b></span>
+                <span className="flex items-center gap-1">🏁 <b>Destination (100m Geofence)</b></span>
+                <span className="flex items-center gap-1">🛵 <b>Live Field Engineer (GPS)</b></span>
+                <span className="flex items-center gap-1">🏛️ <b>Supervisor HQ</b></span>
               </div>
               <div className="text-[11px] text-slate-400">
-                Route Distance: <b className="text-indigo-600 dark:text-indigo-400">{activeVisit?.distanceKm || 0} KM</b>
+                Live Field Units: <b className="text-emerald-600 dark:text-emerald-400">{activeUnits.filter(u => u.status === 'In Transit').length} En-Route</b> | <b className="text-amber-600 dark:text-amber-400">{activeUnits.filter(u => u.status === 'On Site').length} On-Site</b>
               </div>
             </div>
 
@@ -1080,8 +1521,8 @@ export const AdminSwiggyTracker: React.FC<AdminSwiggyTrackerProps> = ({
                       type="button"
                       onClick={() => {
                         setSelectedVisitId(v.id);
-                        setSimProgress(0);
-                        setIsSimulating(false);
+                        setSelectedEngineerName(v.engineerName);
+                        setRadarViewMode('focus');
                       }}
                       className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                     >

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Ticket, Engineer, LocationVisit } from '../types';
+import { Ticket, Engineer, LocationVisit, GPSTrackPoint } from '../types';
 import { calculateDaysBetweenVisitAndClose } from '../utils/dateUtils';
 import { 
   calculateRoadTravelDistance, 
@@ -618,6 +618,64 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
 
     return () => clearInterval(timer);
   }, [activeJourney, isGeofenceEntered]);
+
+  // Real-Time GPS Tracking during Active Journey
+  useEffect(() => {
+    if (!activeJourney || activeJourney.status === 'Completed' || activeJourney.status === 'Arrived') return;
+    if (typeof window === 'undefined' || !navigator.geolocation) return;
+
+    let lastSent = Date.now();
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        const speed = pos.coords.speed !== null && !isNaN(pos.coords.speed) ? Math.round(pos.coords.speed * 3.6) : 24;
+        const accuracy = Math.round(pos.coords.accuracy || 6);
+        const timeNow = new Date().toTimeString().split(' ')[0];
+
+        const newPoint: GPSTrackPoint = {
+          lat,
+          lng,
+          timestamp: timeNow,
+          speedKmH: speed,
+          accuracyMeters: accuracy,
+          batteryPercent: 92,
+          isMock: false,
+          networkStatus: 'Online'
+        };
+
+        // Throttle server updates to at most once per 6 seconds
+        if (Date.now() - lastSent > 6000) {
+          lastSent = Date.now();
+          setActiveJourney(prev => {
+            if (!prev) return null;
+            const currentPoints = prev.gpsTrackPoints ? [...prev.gpsTrackPoints] : [];
+            currentPoints.push(newPoint);
+            const updated: LocationVisit = {
+              ...prev,
+              gpsAccuracyMeters: accuracy,
+              avgSpeedKmH: speed,
+              gpsTrackPoints: currentPoints
+            };
+            fetch(`/api/location-visits/${prev.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated)
+            }).catch(() => {});
+            return updated;
+          });
+        }
+      },
+      (err) => {
+        console.warn("Real GPS watch during journey:", err.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 12000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [activeJourney?.id, activeJourney?.status]);
 
   // 3. Confirm Arrival & Onsite Check-In
   const handleConfirmArrivalAndCheckIn = async () => {

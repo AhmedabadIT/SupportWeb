@@ -725,46 +725,60 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       return;
     }
 
+    const openCount = filteredAndSortedTickets.filter(t => t.status === 'Open').length;
+    const holdCount = filteredAndSortedTickets.filter(t => t.status === 'Hold').length;
+    const closedCount = filteredAndSortedTickets.filter(t => t.status === 'Closed').length;
+
     const tableRows = filteredAndSortedTickets.map((t, idx) => `
       <tr>
-        <td style="text-align: center; font-weight: 500;">${idx + 1}</td>
-        <td style="font-family: monospace; font-weight: bold; color: #1e40af;">${t.ticket_id}</td>
-        <td>${t.date}</td>
-        <td>${t.username}</td>
-        <td class="wrap-col-md">${t.location}</td>
-        <td>${t.product || ''}</td>
-        <td>${t.serial_number || ''}</td>
-        <td>${formatEngineerShortName(t.engineer)}</td>
-        <td style="text-align: center;">
+        <td class="col-sr">${idx + 1}</td>
+        <td class="col-id">${t.ticket_id || '-'}</td>
+        <td class="col-date">${t.date || '-'}</td>
+        <td class="col-user">${t.username || '-'}</td>
+        <td class="col-loc">${t.location || '-'}</td>
+        <td class="col-prod">${t.product || '-'}</td>
+        <td class="col-sn">${t.serial_number || '-'}</td>
+        <td class="col-eng">${formatEngineerShortName(t.engineer) || '-'}</td>
+        <td class="col-status">
           <span class="status-badge ${t.status.toLowerCase()}">${t.status}</span>
         </td>
-        <td class="wrap-col-lg">${t.action_taken || ''}</td>
-        <td>${t.first_visit_date || ''}</td>
-        <td>${t.hold_date || ''}</td>
-        <td>${t.close_date || ''}</td>
-        <td class="wrap-col-md">${t.engineer_remark || ''}</td>
+        <td class="col-action">${t.action_taken || '-'}</td>
+        <td class="col-date">${t.first_visit_date || '-'}</td>
+        <td class="col-date">${t.hold_date || '-'}</td>
+        <td class="col-date">${t.close_date || '-'}</td>
+        <td class="col-remarks">${t.engineer_remark || '-'}</td>
       </tr>
     `).join('');
 
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
           <title>IT Tickets List Export</title>
           <style>
             @page {
               size: landscape;
-              margin: 4mm 6mm;
+              margin: 6mm 8mm;
             }
             @media print {
               body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
+              thead {
+                display: table-header-group;
+              }
+              tr {
+                page-break-inside: avoid;
+              }
+            }
+            * {
+              box-sizing: border-box;
             }
             body {
-              font-family: 'Inter', system-ui, -apple-system, sans-serif;
-              padding: 5px;
-              color: #1e293b;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+              padding: 2px;
+              color: #0f172a;
               background-color: #fff;
               margin: 0;
             }
@@ -772,16 +786,16 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               display: flex;
               justify-content: space-between;
               align-items: flex-end;
-              border-bottom: 2px solid #e2e8f0;
+              border-bottom: 2px solid #2563eb;
               padding-bottom: 6px;
-              margin-bottom: 10px;
+              margin-bottom: 8px;
             }
             h1 {
-              font-size: 15px;
+              font-size: 16px;
               color: #1e3a8a;
               margin: 0;
               font-weight: 800;
-              letter-spacing: -0.5px;
+              letter-spacing: -0.3px;
             }
             .meta-info {
               font-size: 9px;
@@ -789,63 +803,74 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               margin: 0;
               font-weight: 500;
             }
+            .stats-badges {
+              display: flex;
+              gap: 6px;
+              font-size: 8px;
+              font-weight: 700;
+              margin-top: 3px;
+              justify-content: flex-end;
+            }
+            .stat-badge {
+              border: 1px solid #cbd5e1;
+              padding: 2px 6px;
+              border-radius: 4px;
+              background: #f8fafc;
+              white-space: nowrap;
+            }
             table {
               width: 100%;
               border-collapse: collapse;
-              font-size: 8px;
-              line-height: 1.2;
-              table-layout: auto;
+              font-size: 9px;
+              line-height: 1.35;
+              table-layout: fixed;
             }
             th, td {
               border: 1px solid #cbd5e1;
-              padding: 3.5px 4px;
+              padding: 4.5px 5px;
               text-align: left;
               vertical-align: top;
-              white-space: normal;
               word-break: break-word;
+              overflow-wrap: break-word;
             }
             th {
               background-color: #f1f5f9 !important;
               font-weight: 800;
-              color: #334155;
+              color: #1e293b;
               text-transform: uppercase;
-              font-size: 7.5px;
+              font-size: 8px;
               letter-spacing: 0.3px;
             }
-            .wrap-col-md {
-              max-width: 95px;
-              min-width: 55px;
+            tbody tr:nth-child(even) {
+              background-color: #f8fafc !important;
             }
-            .wrap-col-lg {
-              max-width: 150px;
-              min-width: 80px;
-            }
+            
+            /* Column specific widths and alignments */
+            .col-sr { width: 30px; text-align: center; white-space: nowrap; }
+            .col-id { width: 76px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; color: #1e40af; white-space: nowrap; }
+            .col-date { width: 68px; white-space: nowrap; font-size: 8.5px; }
+            .col-user { width: 95px; font-weight: 600; }
+            .col-loc { width: 85px; }
+            .col-prod { width: 80px; }
+            .col-sn { width: 82px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 8.5px; white-space: nowrap; }
+            .col-eng { width: 78px; font-weight: 600; white-space: nowrap; }
+            .col-status { width: 56px; text-align: center; white-space: nowrap; }
+            .col-action { width: 135px; }
+            .col-remarks { width: 105px; }
+
             .status-badge {
               display: inline-block;
-              padding: 1px 4px;
+              padding: 1.5px 5px;
               border-radius: 3px;
               font-weight: 800;
-              font-size: 7px;
+              font-size: 7.5px;
               text-align: center;
               white-space: nowrap;
+              text-transform: uppercase;
             }
             .status-badge.open { background: #eff6ff !important; color: #1d4ed8 !important; border: 1px solid #bfdbfe; }
             .status-badge.hold { background: #faf5ff !important; color: #6b21a8 !important; border: 1px solid #e9d5ff; }
             .status-badge.closed { background: #ecfdf5 !important; color: #047857 !important; border: 1px solid #a7f3d0; }
-
-            .priority-badge {
-              display: inline-block;
-              padding: 1px 4px;
-              border-radius: 3px;
-              font-weight: 800;
-              font-size: 7px;
-              text-align: center;
-              white-space: nowrap;
-            }
-            .priority-badge.critical { background: #fef2f2 !important; color: #b91c1c !important; border: 1px solid #fecaca; }
-            .priority-badge.high { background: #fff7ed !important; color: #c2410c !important; border: 1px solid #ffedd5; }
-            .priority-badge.medium { background: #fffbeb !important; color: #b45309 !important; border: 1px solid #fef3c7; }
-            .priority-badge.low { background: #f0fdf4 !important; color: #15803d !important; border: 1px solid #dcfce7; }
           </style>
         </head>
         <body>
@@ -854,31 +879,44 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               <h1>IT Ticket Management System</h1>
               <p class="meta-info" style="margin-top: 2px;">Export Date: ${new Date().toLocaleDateString()} | Generated At: ${new Date().toLocaleTimeString()}</p>
             </div>
-            <div class="meta-info" style="text-align: right; font-weight: bold;">
-              Total Filtered Tickets: ${filteredAndSortedTickets.length}
+            <div style="text-align: right;">
+              <div class="meta-info" style="font-weight: bold; margin-bottom: 2px;">
+                Total Filtered Tickets: ${filteredAndSortedTickets.length}
+              </div>
+              <div class="stats-badges">
+                <span class="stat-badge" style="color: #1d4ed8; border-color: #bfdbfe;">Open: ${openCount}</span>
+                <span class="stat-badge" style="color: #6b21a8; border-color: #e9d5ff;">Hold: ${holdCount}</span>
+                <span class="stat-badge" style="color: #047857; border-color: #a7f3d0;">Closed: ${closedCount}</span>
+              </div>
             </div>
           </div>
           <table>
             <thead>
               <tr>
-                <th style="width: 25px; text-align: center;">Sr No</th>
-                <th>Ticket ID</th>
-                <th>Date</th>
-                <th>Username</th>
-                <th>Location</th>
-                <th>Product</th>
-                <th>Serial Number</th>
-                <th>Engineer</th>
-                <th style="text-align: center;">Status</th>
-                <th>Action Taken</th>
-                <th>First Visit Date</th>
-                <th>Hold Date</th>
-                <th>Close Date</th>
-                <th>Remarks</th>
+                <th class="col-sr">#</th>
+                <th class="col-id">Ticket ID</th>
+                <th class="col-date">Date</th>
+                <th class="col-user">Username</th>
+                <th class="col-loc">Location</th>
+                <th class="col-prod">Product</th>
+                <th class="col-sn">Serial No</th>
+                <th class="col-eng">Engineer</th>
+                <th class="col-status">Status</th>
+                <th class="col-action">Action Taken</th>
+                <th class="col-date">First Visit</th>
+                <th class="col-date">Hold Date</th>
+                <th class="col-date">Close Date</th>
+                <th class="col-remarks">Remarks</th>
               </tr>
             </thead>
             <tbody>
-              ${tableRows}
+              ${tableRows.length > 0 ? tableRows : `
+                <tr>
+                  <td colspan="14" style="text-align: center; padding: 25px; color: #64748b; font-weight: bold; font-size: 11px;">
+                    No tickets found.
+                  </td>
+                </tr>
+              `}
             </tbody>
           </table>
           <script>
@@ -907,44 +945,54 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
 
     const tableRows = periodTickets.map((t, idx) => `
       <tr>
-        <td style="text-align: center; font-weight: 500;">${idx + 1}</td>
-        <td style="font-family: monospace; font-weight: bold; color: #1e40af;">${t.ticket_id}</td>
-        <td>${t.date}</td>
-        <td>${t.username}</td>
-        <td class="wrap-col-md">${t.location}</td>
-        <td>${t.product || ''}</td>
-        <td>${t.serial_number || ''}</td>
-        <td>${formatEngineerShortName(t.engineer)}</td>
-        <td style="text-align: center;">
+        <td class="col-sr">${idx + 1}</td>
+        <td class="col-id">${t.ticket_id || '-'}</td>
+        <td class="col-date">${t.date || '-'}</td>
+        <td class="col-user">${t.username || '-'}</td>
+        <td class="col-loc">${t.location || '-'}</td>
+        <td class="col-prod">${t.product || '-'}</td>
+        <td class="col-sn">${t.serial_number || '-'}</td>
+        <td class="col-eng">${formatEngineerShortName(t.engineer) || '-'}</td>
+        <td class="col-status">
           <span class="status-badge ${t.status.toLowerCase()}">${t.status}</span>
         </td>
-        <td class="wrap-col-lg">${t.action_taken || ''}</td>
-        <td>${t.first_visit_date || ''}</td>
-        <td>${t.hold_date || ''}</td>
-        <td>${t.close_date || ''}</td>
-        <td class="wrap-col-md">${t.engineer_remark || ''}</td>
+        <td class="col-action">${t.action_taken || '-'}</td>
+        <td class="col-date">${t.first_visit_date || '-'}</td>
+        <td class="col-date">${t.hold_date || '-'}</td>
+        <td class="col-date">${t.close_date || '-'}</td>
+        <td class="col-remarks">${t.engineer_remark || '-'}</td>
       </tr>
     `).join('');
 
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
           <title>IT Tickets Logs - ${period.label} ${year}</title>
           <style>
             @page {
               size: landscape;
-              margin: 4mm 6mm;
+              margin: 6mm 8mm;
             }
             @media print {
               body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
               }
+              thead {
+                display: table-header-group;
+              }
+              tr {
+                page-break-inside: avoid;
+              }
+            }
+            * {
+              box-sizing: border-box;
             }
             body {
-              font-family: 'Inter', system-ui, -apple-system, sans-serif;
-              padding: 5px;
-              color: #1e293b;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+              padding: 2px;
+              color: #0f172a;
               background-color: #fff;
               margin: 0;
             }
@@ -952,16 +1000,16 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
               display: flex;
               justify-content: space-between;
               align-items: flex-end;
-              border-bottom: 2px solid #e2e8f0;
+              border-bottom: 2px solid #2563eb;
               padding-bottom: 6px;
-              margin-bottom: 10px;
+              margin-bottom: 8px;
             }
             h1 {
-              font-size: 15px;
+              font-size: 16px;
               color: #1e3a8a;
               margin: 0;
               font-weight: 800;
-              letter-spacing: -0.5px;
+              letter-spacing: -0.3px;
             }
             .period-title {
               font-size: 11px;
@@ -978,74 +1026,72 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
             }
             .stats-badges {
               display: flex;
-              gap: 8px;
+              gap: 6px;
               font-size: 8px;
-              font-weight: bold;
-              margin-top: 2px;
+              font-weight: 700;
+              margin-top: 3px;
+              justify-content: flex-end;
             }
             .stat-badge {
               border: 1px solid #cbd5e1;
-              padding: 1px 4px;
-              border-radius: 3px;
+              padding: 2px 6px;
+              border-radius: 4px;
               background: #f8fafc;
+              white-space: nowrap;
             }
             table {
               width: 100%;
               border-collapse: collapse;
-              font-size: 8px;
-              line-height: 1.2;
-              table-layout: auto;
+              font-size: 9px;
+              line-height: 1.35;
+              table-layout: fixed;
             }
             th, td {
               border: 1px solid #cbd5e1;
-              padding: 3.5px 4px;
+              padding: 4.5px 5px;
               text-align: left;
               vertical-align: top;
-              white-space: normal;
               word-break: break-word;
+              overflow-wrap: break-word;
             }
             th {
               background-color: #f1f5f9 !important;
               font-weight: 800;
-              color: #334155;
+              color: #1e293b;
               text-transform: uppercase;
-              font-size: 7.5px;
+              font-size: 8px;
               letter-spacing: 0.3px;
             }
-            .wrap-col-md {
-              max-width: 95px;
-              min-width: 55px;
+            tbody tr:nth-child(even) {
+              background-color: #f8fafc !important;
             }
-            .wrap-col-lg {
-              max-width: 150px;
-              min-width: 80px;
-            }
+            
+            /* Column specific widths and alignments */
+            .col-sr { width: 30px; text-align: center; white-space: nowrap; }
+            .col-id { width: 76px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; color: #1e40af; white-space: nowrap; }
+            .col-date { width: 68px; white-space: nowrap; font-size: 8.5px; }
+            .col-user { width: 95px; font-weight: 600; }
+            .col-loc { width: 85px; }
+            .col-prod { width: 80px; }
+            .col-sn { width: 82px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 8.5px; white-space: nowrap; }
+            .col-eng { width: 78px; font-weight: 600; white-space: nowrap; }
+            .col-status { width: 56px; text-align: center; white-space: nowrap; }
+            .col-action { width: 135px; }
+            .col-remarks { width: 105px; }
+
             .status-badge {
               display: inline-block;
-              padding: 1px 4px;
+              padding: 1.5px 5px;
               border-radius: 3px;
               font-weight: 800;
-              font-size: 7px;
+              font-size: 7.5px;
               text-align: center;
               white-space: nowrap;
+              text-transform: uppercase;
             }
             .status-badge.open { background: #eff6ff !important; color: #1d4ed8 !important; border: 1px solid #bfdbfe; }
             .status-badge.hold { background: #faf5ff !important; color: #6b21a8 !important; border: 1px solid #e9d5ff; }
             .status-badge.closed { background: #ecfdf5 !important; color: #047857 !important; border: 1px solid #a7f3d0; }
-
-            .priority-badge {
-              display: inline-block;
-              padding: 1px 4px;
-              border-radius: 3px;
-              font-weight: 800;
-              font-size: 7px;
-              text-align: center;
-              white-space: nowrap;
-            }
-            .priority-badge.critical { background: #fef2f2 !important; color: #b91c1c !important; border: 1px solid #fecaca; }
-            .priority-badge.high { background: #fff7ed !important; color: #c2410c !important; border: 1px solid #ffedd5; }
-            .priority-badge.medium { background: #fffbeb !important; color: #b45309 !important; border: 1px solid #fef3c7; }
-            .priority-badge.low { background: #f0fdf4 !important; color: #15803d !important; border: 1px solid #dcfce7; }
           </style>
         </head>
         <body>
@@ -1069,26 +1115,26 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
           <table>
             <thead>
               <tr>
-                <th style="width: 25px; text-align: center;">Sr No</th>
-                <th>Ticket ID</th>
-                <th>Date</th>
-                <th>Username</th>
-                <th>Location</th>
-                <th>Product</th>
-                <th>Serial Number</th>
-                <th>Engineer</th>
-                <th style="text-align: center;">Status</th>
-                <th>Action Taken</th>
-                <th>First Visit Date</th>
-                <th>Hold Date</th>
-                <th>Close Date</th>
-                <th>Remarks</th>
+                <th class="col-sr">#</th>
+                <th class="col-id">Ticket ID</th>
+                <th class="col-date">Date</th>
+                <th class="col-user">Username</th>
+                <th class="col-loc">Location</th>
+                <th class="col-prod">Product</th>
+                <th class="col-sn">Serial No</th>
+                <th class="col-eng">Engineer</th>
+                <th class="col-status">Status</th>
+                <th class="col-action">Action Taken</th>
+                <th class="col-date">First Visit</th>
+                <th class="col-date">Hold Date</th>
+                <th class="col-date">Close Date</th>
+                <th class="col-remarks">Remarks</th>
               </tr>
             </thead>
             <tbody>
               ${periodTickets.length === 0 ? `
                 <tr>
-                  <td colspan="14" style="text-align: center; padding: 20px; color: #64748b; font-weight: bold;">
+                  <td colspan="14" style="text-align: center; padding: 25px; color: #64748b; font-weight: bold; font-size: 11px;">
                     No tickets found in this period.
                   </td>
                 </tr>
