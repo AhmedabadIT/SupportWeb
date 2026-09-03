@@ -302,11 +302,18 @@ ${message}
 
   app.post("/api/location-visits", (req, res) => {
     try {
-      const { engineerId, engineerName, startLocationName, destinationLocationName } = req.body;
-      if (!engineerId || !engineerName || !startLocationName || !destinationLocationName) {
-        return res.status(400).json({ error: "Missing required location visit fields (engineer, start location, destination location)" });
+      const { engineerId, engineerName, startLocationName } = req.body;
+      const destinationLocationName = (req.body.destinationLocationName && req.body.destinationLocationName.trim()) 
+        ? req.body.destinationLocationName.trim() 
+        : "En-Route (Destination on Arrival)";
+
+      if (!engineerId || !engineerName || !startLocationName) {
+        return res.status(400).json({ error: "Missing required location visit fields (engineer and start location)" });
       }
-      const newVisit = DBService.createLocationVisit(req.body);
+      const newVisit = DBService.createLocationVisit({
+        ...req.body,
+        destinationLocationName
+      });
       res.status(201).json(newVisit);
     } catch (e: any) {
       res.status(500).json({ error: e.message });

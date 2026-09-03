@@ -3,6 +3,8 @@ import { Ticket, Engineer, LocationVisit, GPSTrackPoint } from '../types';
 import { calculateDaysBetweenVisitAndClose } from '../utils/dateUtils';
 import { 
   calculateRoadTravelDistance, 
+  calculateHaversineDistance,
+  calculateAccumulatedGpsDistance,
   getCurrentGpsPosition,
   DEFAULT_HEADQUARTERS 
 } from '../utils/locationUtils';
@@ -40,7 +42,16 @@ import {
   RefreshCw,
   Activity,
   SlidersHorizontal,
-  PlusCircle
+  PlusCircle,
+  StopCircle,
+  Square,
+  Check,
+  CheckSquare,
+  Flag,
+  X,
+  Gauge,
+  Timer,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -143,6 +154,20 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
   const [checkInTime, setCheckInTime] = useState<string>('');
   const [checkOutTime, setCheckOutTime] = useState<string>('');
 
+  // Live GPS Telemetry & Journey Timer States
+  const [liveTraveledKm, setLiveTraveledKm] = useState<number>(0);
+  const [liveCurrentSpeed, setLiveCurrentSpeed] = useState<number>(0);
+  const [liveGpsAccuracy, setLiveGpsAccuracy] = useState<number>(5);
+  const [liveCurrentCoords, setLiveCurrentCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [elapsedTransitSeconds, setElapsedTransitSeconds] = useState<number>(0);
+
+  // Stop Journey Modal & Arrival States
+  const [isStopModalOpen, setIsStopModalOpen] = useState<boolean>(false);
+  const [stopDestinationName, setStopDestinationName] = useState<string>('');
+  const [stopDestinationCoords, setStopDestinationCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [stopVisitNotes, setStopVisitNotes] = useState<string>('');
+  const [isAcquiringStopGps, setIsAcquiringStopGps] = useState<boolean>(false);
+
   // Saved Location Visits list
   const [visits, setVisits] = useState<LocationVisit[]>([]);
   const [isVisitsLoading, setIsVisitsLoading] = useState(false);
@@ -193,6 +218,59 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
     } finally {
       setIsVisitsLoading(false);
     }
+  };
+
+  // Restore Active Journey from localStorage on Mount
+  useEffect(() => {
+    try {
+      const cachedActive = localStorage.getItem('active_engineer_journey');
+      if (cachedActive) {
+        const jny: LocationVisit = JSON.parse(cachedActive);
+        if (jny && (jny.status === 'In Progress' || jny.status === 'Started')) {
+          setActiveJourney(jny);
+          if (jny.gpsTrackPoints && jny.gpsTrackPoints.length > 0) {
+            const last = jny.gpsTrackPoints[jny.gpsTrackPoints.length - 1];
+            setLiveCurrentCoords({ lat: last.lat, lng: last.lng });
+            setLiveCurrentSpeed(last.speedKmH);
+            const dist = calculateAccumulatedGpsDistance(jny.gpsTrackPoints);
+            setLiveTraveledKm(dist.km);
+          }
+          if (jny.startTime) {
+            const [h, m] = jny.startTime.split(':').map(Number);
+            if (!isNaN(h) && !isNaN(m)) {
+              const now = new Date();
+              const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+              const diffSec = Math.max(0, Math.floor((now.getTime() - startToday.getTime()) / 1000));
+              setElapsedTransitSeconds(diffSec);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not restore active journey:", e);
+    }
+  }, []);
+
+  // Live Elapsed Transit Timer Interval
+  useEffect(() => {
+    if (!activeJourney || activeJourney.status === 'Completed' || activeJourney.status === 'Arrived') return;
+
+    const interval = setInterval(() => {
+      setElapsedTransitSeconds(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeJourney?.id, activeJourney?.status]);
+
+  // Format Elapsed Seconds as HH:MM:SS
+  const formatElapsedSeconds = (totalSec: number) => {
+    const hours = Math.floor(totalSec / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    if (hours > 0) {
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
   useEffect(() => {
@@ -532,11 +610,41 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
     }
   };
 
-  // 1. START JOURNEY WORKFLOW
+  // 1. START JOURNEY WORKFLOW (Engineer only needs to specify start point or click to auto-detect GPS!)
   const handleStartJourney = async () => {
-    if (!startLocName || !destLocName) {
-      showToast("Please specify both Start Location and Destination Location before starting journey.", "error");
-      return;
+    let originLat = startLat;
+    let originLng = startLng;
+    let originName = startLocName.trim();
+
+    // Auto-detect Start GPS if not specified yet
+    if (!originLat || !originLng || !originName) {
+      setIsGpsLoadingStart(true);
+      try {
+        const pos = await getCurrentGpsPosition();
+        originLat = Number(pos.lat.toFixed(6));
+        originLng = Number(pos.lng.toFixed(6));
+        setStartLat(originLat);
+        setStartLng(originLng);
+        if (!originName) {
+          originName = `Live GPS Origin (${originLat.toFixed(5)}, ${originLng.toFixed(5)})`;
+          setStartLocName(originName);
+        }
+        setStartGpsActive(true);
+      } catch (gpsErr: any) {
+        if (originName) {
+          const defaultHq = systemMode === 'Surat' ? DEFAULT_HEADQUARTERS.SURAT : DEFAULT_HEADQUARTERS.AHMEDABAD;
+          originLat = defaultHq.lat;
+          originLng = defaultHq.lng;
+          setStartLat(originLat);
+          setStartLng(originLng);
+        } else {
+          showToast("Please specify a Starting Point or allow device GPS access to start your journey.", "error");
+          setIsGpsLoadingStart(false);
+          return;
+        }
+      } finally {
+        setIsGpsLoadingStart(false);
+      }
     }
 
     const engName = authenticatedEngineer ? authenticatedEngineer.name : selectedEngineerName;
@@ -545,30 +653,46 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().split(' ')[0].substring(0, 5);
-
     const journeyId = `jny-${Date.now()}`;
+
+    // Destination is strictly optional at journey start! Engineer can confirm upon arrival via STOP button.
+    const initialDestName = destLocName.trim() || 'En-Route (Destination on Arrival)';
+    const initialDestCoords = (destLat && destLng) ? { lat: destLat, lng: destLng } : undefined;
+
+    const initialPoint: GPSTrackPoint = {
+      lat: originLat,
+      lng: originLng,
+      timestamp: now.toTimeString().split(' ')[0],
+      speedKmH: 0,
+      accuracyMeters: 4,
+      batteryPercent: 95,
+      isMock: false,
+      networkStatus: 'Online'
+    };
 
     const newJourney: LocationVisit = {
       id: journeyId,
+      journeyId: ('JRN-' + Date.now().toString().slice(-6)),
       engineerId: engId,
       engineerName: engName,
       ticketNumber: linkedTicketId ? tickets.find(t => t.id === linkedTicketId || t.ticket_id === linkedTicketId)?.ticket_id : undefined,
-      startLocationName: startLocName,
-      startCoords: { lat: startLat || 23.0225, lng: startLng || 72.5714 },
-      destinationLocationName: destLocName,
-      destinationCoords: { lat: destLat || 23.0725, lng: destLng || 72.6214 },
-      distanceKm: calculatedDistance.km,
-      distanceMiles: calculatedDistance.miles,
+      startLocationName: originName,
+      startCoords: { lat: originLat, lng: originLng },
+      destinationLocationName: initialDestName,
+      destinationCoords: initialDestCoords,
+      distanceKm: calculatedDistance.km || 0,
+      distanceMiles: calculatedDistance.miles || 0,
       visitDate: dateStr,
       visitTime: timeStr,
       startTime: timeStr,
-      notes: visitNotes || 'Active field transit',
+      notes: visitNotes || 'Live GPS Journey En-Route',
       status: 'In Progress',
       geofenceEntered: false,
       gpsAccuracyMeters: 4,
-      deviceBatteryPercent: 94,
+      deviceBatteryPercent: 95,
       mockGpsDetected: false,
       networkStatus: 'Online',
+      gpsTrackPoints: [initialPoint],
       created_at: now.toISOString()
     };
 
@@ -586,11 +710,17 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
       const localVisits: LocationVisit[] = JSON.parse(localStorage.getItem('cached_location_visits') || '[]');
       localVisits.unshift(newJourney);
       localStorage.setItem('cached_location_visits', JSON.stringify(localVisits));
+      localStorage.setItem('active_engineer_journey', JSON.stringify(newJourney));
 
       setActiveJourney(newJourney);
+      setLiveTraveledKm(0);
+      setLiveCurrentSpeed(0);
+      setLiveCurrentCoords({ lat: originLat, lng: originLng });
+      setElapsedTransitSeconds(0);
       setJourneyProgress(0);
       setIsGeofenceEntered(false);
-      showToast("🛵 Journey Started! Real-time GPS tracking & geofencing activated.", "success");
+
+      showToast("🛵 Journey Started! Real-time GPS tracking is now active. Press 'Stop' when you reach the site.", "success");
       fetchVisits();
     } catch (err) {
       console.error(err);
@@ -598,28 +728,7 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
     }
   };
 
-  // 2. Continuous Journey Progress & Geofence Monitor
-  useEffect(() => {
-    if (!activeJourney || activeJourney.status === 'Completed') return;
-
-    const timer = setInterval(() => {
-      setJourneyProgress(prev => {
-        const next = prev + 0.05;
-        if (next >= 0.95 && !isGeofenceEntered) {
-          setIsGeofenceEntered(true);
-          showToast("📍 GEOFENCE ALERT: You are within 100 meters of destination site!", "info");
-        }
-        if (next >= 1) {
-          return 1;
-        }
-        return next;
-      });
-    }, 2000);
-
-    return () => clearInterval(timer);
-  }, [activeJourney, isGeofenceEntered]);
-
-  // Real-Time GPS Tracking during Active Journey
+  // 2. Real-Time GPS Tracking during Active Journey via navigator.geolocation.watchPosition
   useEffect(() => {
     if (!activeJourney || activeJourney.status === 'Completed' || activeJourney.status === 'Arrived') return;
     if (typeof window === 'undefined' || !navigator.geolocation) return;
@@ -629,9 +738,16 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
       (pos) => {
         const lat = Number(pos.coords.latitude.toFixed(6));
         const lng = Number(pos.coords.longitude.toFixed(6));
-        const speed = pos.coords.speed !== null && !isNaN(pos.coords.speed) ? Math.round(pos.coords.speed * 3.6) : 24;
-        const accuracy = Math.round(pos.coords.accuracy || 6);
+        const rawSpeed = pos.coords.speed;
+        const speed = (rawSpeed !== null && !isNaN(rawSpeed) && rawSpeed > 0) 
+          ? Math.round(rawSpeed * 3.6) 
+          : (liveCurrentSpeed > 0 ? liveCurrentSpeed : 32);
+        const accuracy = Math.round(pos.coords.accuracy || 5);
         const timeNow = new Date().toTimeString().split(' ')[0];
+
+        setLiveCurrentCoords({ lat, lng });
+        setLiveCurrentSpeed(speed);
+        setLiveGpsAccuracy(accuracy);
 
         const newPoint: GPSTrackPoint = {
           lat,
@@ -644,38 +760,191 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
           networkStatus: 'Online'
         };
 
-        // Throttle server updates to at most once per 6 seconds
-        if (Date.now() - lastSent > 6000) {
-          lastSent = Date.now();
-          setActiveJourney(prev => {
-            if (!prev) return null;
-            const currentPoints = prev.gpsTrackPoints ? [...prev.gpsTrackPoints] : [];
+        setActiveJourney(prev => {
+          if (!prev) return null;
+          const currentPoints = prev.gpsTrackPoints ? [...prev.gpsTrackPoints] : [];
+          
+          // Filter out stationary GPS noise (< 3 meters)
+          const lastPoint = currentPoints[currentPoints.length - 1];
+          const hasMoved = !lastPoint || calculateHaversineDistance(lastPoint.lat, lastPoint.lng, lat, lng).km > 0.003;
+          
+          if (hasMoved) {
             currentPoints.push(newPoint);
-            const updated: LocationVisit = {
-              ...prev,
-              gpsAccuracyMeters: accuracy,
-              avgSpeedKmH: speed,
-              gpsTrackPoints: currentPoints
-            };
+          }
+
+          const distResult = calculateAccumulatedGpsDistance(currentPoints);
+          if (distResult.km > 0) {
+            setLiveTraveledKm(distResult.km);
+          }
+
+          const updated: LocationVisit = {
+            ...prev,
+            gpsAccuracyMeters: accuracy,
+            avgSpeedKmH: speed,
+            gpsTrackPoints: currentPoints,
+            distanceKm: distResult.km > 0 ? distResult.km : prev.distanceKm,
+            distanceMiles: distResult.miles > 0 ? distResult.miles : prev.distanceMiles
+          };
+
+          // Cache locally immediately so reload doesn't lose state
+          localStorage.setItem('active_engineer_journey', JSON.stringify(updated));
+
+          // Throttle server sync to once every 5 seconds
+          if (Date.now() - lastSent > 5000) {
+            lastSent = Date.now();
             fetch(`/api/location-visits/${prev.id}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(updated)
             }).catch(() => {});
-            return updated;
-          });
-        }
+          }
+
+          return updated;
+        });
       },
       (err) => {
         console.warn("Real GPS watch during journey:", err.message);
       },
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 12000 }
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 }
     );
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
   }, [activeJourney?.id, activeJourney?.status]);
+
+  // 3. STOP JOURNEY (REACHED LOCATION) WORKFLOW
+  // Triggered when engineer clicks the prominent STOP button upon reaching the site
+  const handleOpenStopJourney = async () => {
+    if (!activeJourney) return;
+
+    setIsAcquiringStopGps(true);
+    let finalLat = liveCurrentCoords?.lat || activeJourney.startCoords.lat;
+    let finalLng = liveCurrentCoords?.lng || activeJourney.startCoords.lng;
+
+    // Grab high-accuracy device GPS position at the instant of clicking STOP
+    try {
+      const pos = await getCurrentGpsPosition();
+      finalLat = Number(pos.lat.toFixed(6));
+      finalLng = Number(pos.lng.toFixed(6));
+      setLiveCurrentCoords({ lat: finalLat, lng: finalLng });
+    } catch (err) {
+      console.warn("Could not get fresh GPS on stop, using latest live track point");
+      if (activeJourney.gpsTrackPoints && activeJourney.gpsTrackPoints.length > 0) {
+        const last = activeJourney.gpsTrackPoints[activeJourney.gpsTrackPoints.length - 1];
+        finalLat = last.lat;
+        finalLng = last.lng;
+      }
+    } finally {
+      setIsAcquiringStopGps(false);
+    }
+
+    setStopDestinationCoords({ lat: finalLat, lng: finalLng });
+
+    // Determine default destination name to suggest
+    let defaultDestName = '';
+    if (linkedTicketId) {
+      const t = tickets.find(tk => tk.id === linkedTicketId || tk.ticket_id === linkedTicketId);
+      if (t && t.location) {
+        defaultDestName = `${t.ticket_id} - ${t.location}`;
+      }
+    }
+    if (!defaultDestName && destLocName && !destLocName.includes('En-Route')) {
+      defaultDestName = destLocName;
+    }
+    if (!defaultDestName && activeJourney.destinationLocationName && !activeJourney.destinationLocationName.includes('En-Route')) {
+      defaultDestName = activeJourney.destinationLocationName;
+    }
+    if (!defaultDestName) {
+      defaultDestName = (finalLat && finalLng) 
+        ? `Destination Site (${finalLat.toFixed(5)}, ${finalLng.toFixed(5)})` 
+        : 'Destination Site Reached';
+    }
+
+    setStopDestinationName(defaultDestName);
+    setStopVisitNotes(activeJourney.notes || visitNotes || '');
+    setIsStopModalOpen(true);
+  };
+
+  // Confirm Stop Journey and Save Completed Visit Log
+  const handleConfirmStopJourney = async (mode: 'completed' | 'arrived' = 'completed') => {
+    if (!activeJourney) return;
+
+    const now = new Date();
+    const nowTimeStr = now.toTimeString().split(' ')[0].substring(0, 5);
+
+    const destName = stopDestinationName.trim() || 'Destination Reached';
+    const destCoords = stopDestinationCoords || liveCurrentCoords || activeJourney.startCoords;
+
+    // Calculate final distance: prefer accumulated GPS breadcrumbs, or road distance from start to stop coords
+    let finalDistanceKm = liveTraveledKm;
+    if (finalDistanceKm < 0.1 && activeJourney.startCoords && destCoords) {
+      const roadCalc = calculateRoadTravelDistance(
+        activeJourney.startCoords.lat,
+        activeJourney.startCoords.lng,
+        destCoords.lat,
+        destCoords.lng
+      );
+      finalDistanceKm = roadCalc.km;
+    }
+    if (finalDistanceKm < 0.1) {
+      finalDistanceKm = 0.5; // Minimum realistic short visit
+    }
+    const finalDistanceMiles = Number((finalDistanceKm * 0.621371).toFixed(2));
+    const totalDurationMins = Math.max(1, Math.round(elapsedTransitSeconds / 60));
+
+    const updated: LocationVisit = {
+      ...activeJourney,
+      destinationLocationName: destName,
+      destinationCoords: destCoords ? { lat: destCoords.lat, lng: destCoords.lng } : undefined,
+      distanceKm: Number(finalDistanceKm.toFixed(2)),
+      distanceMiles: finalDistanceMiles,
+      totalDurationMins,
+      endTime: nowTimeStr,
+      checkInTime: nowTimeStr,
+      checkOutTime: mode === 'completed' ? nowTimeStr : undefined,
+      status: mode === 'completed' ? 'Completed' : 'Arrived',
+      notes: stopVisitNotes || `Journey stopped at ${nowTimeStr} • Site Reached: ${destName}`
+    };
+
+    try {
+      try {
+        await fetch(`/api/location-visits/${activeJourney.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated)
+        });
+      } catch (e) {
+        console.log('Saved stop journey in local storage');
+      }
+
+      const localVisits: LocationVisit[] = JSON.parse(localStorage.getItem('cached_location_visits') || '[]');
+      const idx = localVisits.findIndex(v => v.id === activeJourney.id);
+      if (idx >= 0) {
+        localVisits[idx] = updated;
+      } else {
+        localVisits.unshift(updated);
+      }
+      localStorage.setItem('cached_location_visits', JSON.stringify(localVisits));
+      localStorage.removeItem('active_engineer_journey');
+
+      if (mode === 'completed') {
+        setActiveJourney(null);
+        setJourneyProgress(0);
+        setIsGeofenceEntered(false);
+        showToast(`🏁 Journey Stopped! Reached ${destName}. Logged ${updated.distanceKm} KM in ${totalDurationMins} mins.`, "success");
+      } else {
+        setActiveJourney(updated);
+        showToast(`📍 Arrived and Checked-In at ${destName}. On-site timer started!`, "success");
+      }
+
+      setIsStopModalOpen(false);
+      fetchVisits();
+    } catch (err: any) {
+      console.error("Error stopping journey:", err);
+      showToast("Error stopping journey: " + err.message, "error");
+    }
+  };
 
   // 3. Confirm Arrival & Onsite Check-In
   const handleConfirmArrivalAndCheckIn = async () => {
@@ -1416,15 +1685,20 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                 {/* START POINT BOX */}
                 <div className="p-4 bg-slate-50/70 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5 uppercase tracking-wider">
-                      <MapPin className="w-4 h-4 text-indigo-600" />
-                      1. Starting Point Location
-                    </label>
+                    <div>
+                      <label className="text-xs font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5 uppercase tracking-wider">
+                        <MapPin className="w-4 h-4 text-indigo-600" />
+                        1. Starting Point Location (Required)
+                      </label>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Specify origin or press Start Journey to auto-detect GPS
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={handleGetStartGps}
                       disabled={isGpsLoadingStart}
-                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
                     >
                       <Compass className="w-3.5 h-3.5" />
                       {isGpsLoadingStart ? "Detecting GPS..." : "📍 Get Current GPS"}
@@ -1435,9 +1709,38 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                     type="text"
                     value={startLocName}
                     onChange={(e) => setStartLocName(e.target.value)}
-                    placeholder="E.g., Office, Home Base, Starting Outlet..."
+                    placeholder="E.g., Ahmedabad HQ, Home Base, Current Location..."
                     className="w-full text-xs font-bold p-2.5 border border-slate-250 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   />
+
+                  {/* Quick HQ Presets */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStartLat(DEFAULT_HEADQUARTERS.AHMEDABAD.lat);
+                        setStartLng(DEFAULT_HEADQUARTERS.AHMEDABAD.lng);
+                        setStartLocName(DEFAULT_HEADQUARTERS.AHMEDABAD.name);
+                        showToast("Start location set to RO Ahmedabad HQ", "info");
+                      }}
+                      className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-md text-[10px] font-semibold border border-indigo-200/60 dark:border-indigo-800/60 cursor-pointer"
+                    >
+                      🏢 Ahmedabad HQ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStartLat(DEFAULT_HEADQUARTERS.SURAT.lat);
+                        setStartLng(DEFAULT_HEADQUARTERS.SURAT.lng);
+                        setStartLocName(DEFAULT_HEADQUARTERS.SURAT.name);
+                        showToast("Start location set to Surat Sub-RO", "info");
+                      }}
+                      className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-md text-[10px] font-semibold border border-indigo-200/60 dark:border-indigo-800/60 cursor-pointer"
+                    >
+                      🏢 Surat Sub-RO
+                    </button>
+                  </div>
 
                   {/* Lat Lng Inputs */}
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-800/50">
@@ -1467,15 +1770,20 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                 {/* DESTINATION POINT BOX */}
                 <div className="p-4 bg-slate-50/70 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-teal-700 dark:text-teal-400 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Navigation className="w-4 h-4 text-teal-600" />
-                      2. Destination Location
-                    </label>
+                    <div>
+                      <label className="text-xs font-bold text-teal-700 dark:text-teal-400 flex items-center gap-1.5 uppercase tracking-wider">
+                        <Navigation className="w-4 h-4 text-teal-600" />
+                        2. Destination Location
+                      </label>
+                      <span className="text-[10px] text-teal-600 dark:text-teal-400 font-medium block mt-0.5">
+                        Optional before start • Confirm upon arrival via Stop button
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={handleGetDestGps}
                       disabled={isGpsLoadingDest}
-                      className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
                     >
                       <Compass className="w-3.5 h-3.5" />
                       {isGpsLoadingDest ? "Detecting GPS..." : "📍 Get Current GPS"}
@@ -1486,7 +1794,7 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                     type="text"
                     value={destLocName}
                     onChange={(e) => setDestLocName(e.target.value)}
-                    placeholder="E.g., Client Branch, Destination Site..."
+                    placeholder="Optional (E.g. General Hospital Rajkot, BO Branch, or leave blank)..."
                     className="w-full text-xs font-bold p-2.5 border border-slate-250 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-teal-500 focus:outline-none"
                   />
 
@@ -1499,7 +1807,7 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                         onChange={(e) => handleSelectTicketDestination(e.target.value)}
                         className="w-full text-xs p-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-medium cursor-pointer"
                       >
-                        <option value="">-- Select Assigned Ticket Destination --</option>
+                        <option value="">-- Select Assigned Ticket Destination (Optional) --</option>
                         {engineerTickets.map(t => (
                           <option key={t.id} value={t.id}>
                             {t.ticket_id} - {t.location} ({t.username})
@@ -1541,10 +1849,10 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Route className="w-5 h-5 text-indigo-400" />
-                    <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">Calculated Distance Result</span>
+                    <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">Calculated Route Distance</span>
                   </div>
                   <div className="text-xs text-slate-300">
-                    From <span className="font-bold text-white">{startLocName || "Start"}</span> to <span className="font-bold text-white">{destLocName || "Destination"}</span>
+                    From <span className="font-bold text-white">{startLocName || "Start Point"}</span> to <span className="font-bold text-white">{destLocName || "En-Route (Set on Arrival)"}</span>
                   </div>
                 </div>
 
@@ -1586,14 +1894,19 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
 
               {/* Start Journey & Save Buttons */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={handleStartJourney}
-                  className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all transform hover:-translate-y-0.5"
-                >
-                  <span className="text-base">🛵</span>
-                  Start Journey & Track Live GPS
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleStartJourney}
+                    className="px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all transform hover:-translate-y-0.5"
+                  >
+                    <span className="text-base">🛵</span>
+                    Start Journey & Track Live GPS
+                  </button>
+                  <span className="text-[11px] text-slate-400 hidden sm:inline">
+                    (Auto-detects start GPS • Destination optional)
+                  </span>
+                </div>
 
                 <button
                   type="submit"
@@ -1608,53 +1921,68 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
 
             {/* LIVE ACTIVE JOURNEY DRIVING HUD & GEOFENCING PANEL */}
             {activeJourney && (
-              <div className="mt-6 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500/50 rounded-2xl p-5 text-white shadow-2xl space-y-4 relative overflow-hidden">
-                <div className="flex items-center justify-between border-b border-indigo-800/80 pb-3">
+              <div className="mt-6 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500/60 rounded-2xl p-5 text-white shadow-2xl space-y-4 relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-indigo-800/80 pb-3 gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></span>
-                    <span className="text-xs font-black uppercase text-indigo-300 tracking-wider">
-                      ACTIVE GPS DRIVING NAVIGATION HUD
+                    <span className="w-3.5 h-3.5 rounded-full bg-red-500 animate-ping"></span>
+                    <span className="text-xs font-black uppercase text-indigo-300 tracking-wider flex items-center gap-2">
+                      <span>🟢 LIVE GPS TRACKING ACTIVE</span>
+                      <span className="font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-md text-[11px]">
+                        ⏱️ {formatElapsedSeconds(elapsedTransitSeconds)}
+                      </span>
                     </span>
                   </div>
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-black text-xs">
-                    {activeJourney.status === 'Arrived' ? '📍 Arrived Onsite' : '🛵 En-Route'}
-                  </span>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-black text-xs">
+                      {activeJourney.status === 'Arrived' ? '📍 Arrived Onsite' : '🛵 En-Route'}
+                    </span>
+
+                    {/* Prominent STOP Button in HUD Header */}
+                    <button
+                      type="button"
+                      onClick={handleOpenStopJourney}
+                      className="px-4 py-1.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer transition-all transform hover:scale-105"
+                    >
+                      <StopCircle className="w-4 h-4 animate-pulse" />
+                      🛑 STOP JOURNEY
+                    </button>
+                  </div>
                 </div>
 
-                {/* Progress Bar */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-bold">
-                    <span className="text-indigo-200">Route Completion Progress</span>
-                    <span className="font-mono text-amber-400 font-extrabold">{Math.round(journeyProgress * 100)}%</span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5 border border-indigo-700/50">
-                    <div 
-                      className="bg-gradient-to-r from-indigo-500 via-teal-400 to-emerald-400 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${journeyProgress * 100}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Route Details */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-indigo-900/60 text-xs">
+                {/* Real-time Telemetry Metrics Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/70 p-3.5 rounded-xl border border-indigo-900/70 text-xs">
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Start Origin</span>
                     <span className="font-extrabold text-emerald-400 truncate block">🟢 {activeJourney.startLocationName}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Destination Site</span>
-                    <span className="font-extrabold text-rose-400 truncate block">🏁 {activeJourney.destinationLocationName}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Remaining Distance</span>
-                    <span className="font-mono font-extrabold text-amber-400 text-sm">
-                      {(activeJourney.distanceKm * (1 - journeyProgress)).toFixed(1)} / {activeJourney.distanceKm} KM
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {activeJourney.startCoords.lat.toFixed(4)}, {activeJourney.startCoords.lng.toFixed(4)}
                     </span>
                   </div>
+
                   <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Live GPS Telemetry</span>
-                    <span className="font-mono text-teal-300 font-bold">
-                      ±{activeJourney.gpsAccuracyMeters}m • 🔋 {activeJourney.deviceBatteryPercent}%
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Destination</span>
+                    <span className="font-extrabold text-rose-400 truncate block">🏁 {activeJourney.destinationLocationName}</span>
+                    <span className="text-[10px] text-teal-400 font-medium">Confirm upon stop</span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Distance Traveled</span>
+                    <span className="font-mono font-extrabold text-amber-400 text-base">
+                      {liveTraveledKm > 0 ? `${liveTraveledKm.toFixed(2)} KM` : `${activeJourney.distanceKm || 0} KM`}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium block">
+                      Live GPS Path
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Current Speed & GPS</span>
+                    <span className="font-mono text-teal-300 font-bold text-sm block">
+                      ⚡ {liveCurrentSpeed} KM/H
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      ±{liveGpsAccuracy}m accuracy • 🔋 95%
                     </span>
                   </div>
                 </div>
@@ -1664,59 +1992,195 @@ export const EngineerDashboardView: React.FC<EngineerDashboardViewProps> = ({
                   <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 rounded-xl text-emerald-200 text-xs font-bold flex flex-col sm:flex-row items-center justify-between gap-2 shadow-lg animate-fade-in">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">📍</span>
-                      <span>Geofence Detection: You are within 100m of destination site!</span>
+                      <span>Geofence Detection: Within destination zone!</span>
                     </div>
-                    {activeJourney.status !== 'Arrived' && (
-                      <button
-                        type="button"
-                        onClick={handleConfirmArrivalAndCheckIn}
-                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs transition-colors cursor-pointer shrink-0"
-                      >
-                        Confirm Arrival & Check-In 📍
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={handleOpenStopJourney}
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black rounded-lg text-xs transition-colors cursor-pointer shrink-0"
+                    >
+                      🛑 Stop & Check-In Here
+                    </button>
                   </div>
                 )}
 
-                {/* Check-In / Check-Out Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-indigo-900/80">
-                  <div className="text-xs space-x-3">
-                    {checkInTime && (
-                      <span className="font-bold text-emerald-300">
-                        Check-In: <b className="font-mono">{checkInTime}</b>
-                      </span>
-                    )}
-                    {checkOutTime && (
-                      <span className="font-bold text-teal-300">
-                        Check-Out: <b className="font-mono">{checkOutTime}</b>
+                {/* Primary Action Buttons Bar with Big Red Stop Button */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-indigo-900/80">
+                  <div className="text-xs text-slate-300 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>Started at <b className="text-white font-mono">{activeJourney.startTime || activeJourney.visitTime}</b></span>
+                    {liveCurrentCoords && (
+                      <span className="text-indigo-300 font-mono text-[11px] hidden md:inline">
+                        (Live: {liveCurrentCoords.lat.toFixed(5)}, {liveCurrentCoords.lng.toFixed(5)})
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {activeJourney.status !== 'Arrived' && !isGeofenceEntered && (
-                      <button
-                        type="button"
-                        onClick={handleConfirmArrivalAndCheckIn}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs cursor-pointer shadow-md"
-                      >
-                        Destination Reached 📍
-                      </button>
-                    )}
-
-                    {activeJourney.status === 'Arrived' && (
-                      <button
-                        type="button"
-                        onClick={handleCheckoutSite}
-                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs cursor-pointer shadow-md flex items-center gap-1.5"
-                      >
-                        <span>Check-Out & Complete Visit Log</span>
-                        <span>✅</span>
-                      </button>
-                    )}
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    {/* The Big, High-Visibility Stop Button */}
+                    <button
+                      type="button"
+                      onClick={handleOpenStopJourney}
+                      className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-[0_0_20px_rgba(225,29,72,0.4)] hover:shadow-[0_0_25px_rgba(225,29,72,0.6)] flex items-center justify-center gap-2 cursor-pointer transition-all transform hover:scale-105 active:scale-95"
+                    >
+                      <StopCircle className="w-5 h-5 text-white animate-pulse" />
+                      <span>🛑 STOP JOURNEY (REACHED LOCATION)</span>
+                    </button>
                   </div>
                 </div>
 
+              </div>
+            )}
+
+            {/* STOP JOURNEY & DESTINATION REACHED MODAL */}
+            {isStopModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+                <div className="bg-white dark:bg-slate-900 border-2 border-red-500/40 rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                  
+                  {/* Modal Header */}
+                  <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+                        <StopCircle className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                          Stop Journey & Confirm Arrival
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Live GPS tracking paused. Confirm destination location to finalize your visit log.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsStopModalOpen(false)}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Destination GPS Captured Badge */}
+                  <div className="p-3 bg-red-50/60 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/40 rounded-xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 text-red-900 dark:text-red-300 font-bold">
+                      <Compass className="w-4 h-4 text-red-600 animate-spin-slow" />
+                      <span>Destination GPS Captured:</span>
+                    </div>
+                    <span className="font-mono text-red-700 dark:text-red-400 font-extrabold">
+                      {stopDestinationCoords 
+                        ? `${stopDestinationCoords.lat.toFixed(5)}, ${stopDestinationCoords.lng.toFixed(5)}`
+                        : (isAcquiringStopGps ? 'Acquiring GPS...' : 'GPS Coordinates Locked')}
+                    </span>
+                  </div>
+
+                  {/* Destination Location Input */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                      <span>Reached Destination / Site Name</span>
+                      <span className="text-[11px] text-red-600 font-bold lowercase">required</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={stopDestinationName}
+                      onChange={(e) => setStopDestinationName(e.target.value)}
+                      placeholder="E.g., General Hospital Rajkot, BO Dariyapur, Outlet #42..."
+                      className="w-full text-xs font-bold p-3 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-red-500 focus:outline-none"
+                    />
+
+                    {/* Quick Select Chips from Assigned Jobs */}
+                    {engineerTickets.length > 0 && (
+                      <div className="pt-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1.5">
+                          Quick Select From Assigned Jobs:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                          {engineerTickets.map(t => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => {
+                                setStopDestinationName(`${t.ticket_id} - ${t.location}`);
+                                if (t.location) {
+                                  setStopVisitNotes(`Service visit for ${t.ticket_id}: ${t.problem}`);
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-lg text-[11px] font-semibold border border-slate-250 dark:border-slate-700 transition-all cursor-pointer truncate max-w-xs"
+                            >
+                              📍 {t.location} ({t.ticket_id})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary Stats Grid */}
+                  <div className="grid grid-cols-3 gap-2 bg-slate-100/70 dark:bg-slate-950/80 p-3 rounded-2xl border border-slate-250 dark:border-slate-800 text-center">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Traveled</span>
+                      <span className="text-lg font-black text-amber-500">
+                        {liveTraveledKm > 0 ? `${liveTraveledKm.toFixed(2)} KM` : `${activeJourney?.distanceKm || 0} KM`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Transit Time</span>
+                      <span className="text-lg font-black text-teal-500">
+                        {formatElapsedSeconds(elapsedTransitSeconds)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">GPS Points</span>
+                      <span className="text-lg font-black text-indigo-500">
+                        {activeJourney?.gpsTrackPoints?.length || 1} points
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Optional Remarks */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                      Duty Remarks / Action Notes (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={stopVisitNotes}
+                      onChange={(e) => setStopVisitNotes(e.target.value)}
+                      placeholder="E.g., Reached on-site on schedule, starting diagnostic check..."
+                      className="w-full text-xs p-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setIsStopModalOpen(false)}
+                      className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer transition-colors"
+                    >
+                      Cancel & Keep Driving
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmStopJourney('arrived')}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      Mark Arrived & Check-In
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmStopJourney('completed')}
+                      className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs rounded-xl shadow-lg cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Confirm Stop & Complete Visit Log
+                    </button>
+                  </div>
+
+                </div>
               </div>
             )}
 

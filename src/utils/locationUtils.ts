@@ -61,6 +61,33 @@ export function calculateHaversineDistance(
   };
 }
 
+/**
+ * Calculates the total accumulated distance along a sequence of GPS coordinates (breadcrumbs)
+ */
+export function calculateAccumulatedGpsDistance(
+  points: { lat: number; lng: number }[]
+): { km: number; miles: number } {
+  if (!points || points.length < 2) {
+    return { km: 0, miles: 0 };
+  }
+
+  let totalKm = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    if (p1 && p2 && p1.lat && p1.lng && p2.lat && p2.lng) {
+      // Calculate haversine between consecutive breadcrumbs
+      const d = calculateHaversineDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+      totalKm += d.km;
+    }
+  }
+
+  return {
+    km: Number(totalKm.toFixed(2)),
+    miles: Number((totalKm * 0.621371).toFixed(2))
+  };
+}
+
 export const DEFAULT_HEADQUARTERS = {
   AHMEDABAD: { name: 'RO Ahmedabad HQ', lat: 23.0225, lng: 72.5714 },
   SURAT: { name: 'Surat Sub-RO', lat: 21.1702, lng: 72.8311 }
